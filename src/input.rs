@@ -1,5 +1,6 @@
-use bevy::prelude::*;
 use crate::components::*;
+use bevy::ecs::observer::On;
+use bevy::prelude::*;
 
 pub struct InputPlugin;
 
@@ -16,7 +17,8 @@ fn handle_keyboard_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut rotation_queue: ResMut<RotationQueue>,
 ) {
-    let direction = if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight)
+    let direction = if keyboard_input.pressed(KeyCode::ShiftLeft)
+        || keyboard_input.pressed(KeyCode::ShiftRight)
     {
         Direction::CounterClockwise
     } else {
@@ -24,59 +26,85 @@ fn handle_keyboard_input(
     };
 
     if keyboard_input.just_pressed(KeyCode::KeyR) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Right, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Right,
+            direction,
+        });
     }
     if keyboard_input.just_pressed(KeyCode::KeyL) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Left, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Left,
+            direction,
+        });
     }
     if keyboard_input.just_pressed(KeyCode::KeyU) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Up, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Up,
+            direction,
+        });
     }
     if keyboard_input.just_pressed(KeyCode::KeyD) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Down, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Down,
+            direction,
+        });
     }
     if keyboard_input.just_pressed(KeyCode::KeyF) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Front, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Front,
+            direction,
+        });
     }
     if keyboard_input.just_pressed(KeyCode::KeyB) {
-        rotation_queue.0.push_back(RotationMove { side: Side::Back, direction });
+        rotation_queue.0.push_back(RotationMove {
+            side: Side::Back,
+            direction,
+        });
     }
 }
 
 fn handle_drag_start(
-    trigger: Trigger<Pointer<DragStart>>,
+    trigger: On<Pointer<DragStart>>,
     mut drag_state: ResMut<DragState>,
     face_query: Query<&CubieFace>,
 ) {
-    if let Ok(cubie_face) = face_query.get(trigger.entity()) {
-        if let Some(pos) = trigger.event().hit.position {
-            drag_state.start_face = Some((trigger.entity(), cubie_face.face, pos));
+    let entity = trigger.entity;
+    if let Ok(cubie_face) = face_query.get(entity) {
+        if let Some(pos) = trigger.hit.position {
+            drag_state.start_face = Some((entity, cubie_face.face, pos));
         }
     }
 }
 
 fn handle_drag_end(
-    trigger: Trigger<Pointer<DragEnd>>,
+    trigger: On<Pointer<DragEnd>>,
     mut drag_state: ResMut<DragState>,
     mut rotation_queue: ResMut<RotationQueue>,
-    face_query: Query<(&CubieFace, &Parent)>,
+    face_query: Query<(&CubieFace, &ChildOf)>,
     cubie_query: Query<&GridCoord>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Single<(&Camera, &GlobalTransform)>,
 ) {
     if let Some((start_entity, face, start_pos)) = drag_state.start_face.take() {
-        let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
-        
-        let location = trigger.event().pointer_location.position;
-        let Ok(ray) = camera.viewport_to_world(camera_transform, location) else { return };
-        
+        let (camera, camera_transform) = *camera_query;
+
+        let location = trigger.pointer_location.position;
+        let Ok(ray) = camera.viewport_to_world(camera_transform, location) else {
+            return;
+        };
+
         let normal = face.normal();
-        let distance = ray.intersect_plane(start_pos, InfinitePlane3d::new(normal)).unwrap_or(0.0);
+        let distance = ray
+            .intersect_plane(
+                start_pos,
+                InfinitePlane3d::new(Dir3::new(normal).unwrap_or(Dir3::Y)),
+            )
+            .unwrap_or(0.0);
         let end_pos = ray.get_point(distance);
-        
+
         let delta: Vec3 = end_pos - start_pos;
         if delta.length() > 0.4 {
-            if let Ok((_, parent)) = face_query.get(start_entity) {
-                if let Ok(grid_coord) = cubie_query.get(parent.get()) {
+            if let Ok((_, child_of)) = face_query.get(start_entity) {
+                if let Ok(grid_coord) = cubie_query.get(child_of.0) {
                     if let Some(rm) = determine_move_robust(face, grid_coord.0, delta) {
                         rotation_queue.0.push_back(rm);
                     }
@@ -91,10 +119,10 @@ fn determine_move_robust(face: Face, coord: IVec3, delta: Vec3) -> Option<Rotati
     let normal = face.normal();
     // Drag vector in the plane of the face
     let drag_vec = delta - delta.dot(normal) * normal;
-    
+
     // The rotation axis should be perpendicular to both the face normal and the drag vector
     let raw_axis = normal.cross(drag_vec);
-    
+
     // Quantize the axis to the closest world axis
     let axis = if raw_axis.x.abs() > raw_axis.y.abs() && raw_axis.x.abs() > raw_axis.z.abs() {
         Vec3::X * raw_axis.x.signum()

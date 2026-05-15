@@ -2,13 +2,14 @@ mod components;
 mod input;
 mod rubik;
 
+use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use input::InputPlugin;
 use rubik::RubikPlugin;
 
 fn main() {
     App::new()
-        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.12))) // Dark premium background
+        .insert_resource(ClearColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 1.0)))) // Dark premium background
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Rubik's Cube ECS - Refactored".to_string(),
@@ -57,7 +58,7 @@ fn setup_scene(mut commands: Commands) {
         },
         Transform::from_xyz(-5.0, 4.0, -5.0),
     ));
-    
+
     // Rim light from bottom
     commands.spawn((
         PointLight {
@@ -69,26 +70,23 @@ fn setup_scene(mut commands: Commands) {
     ));
 
     // Ambient light for soft shadows
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 0.15,
+        affects_lightmapped_meshes: false,
     });
 }
 
 fn update_camera_orbit(
     mouse_button: Res<ButtonInput<MouseButton>>,
-    mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
-    mut query: Query<(&mut Transform, &mut components::OrbitCamera)>,
+    accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
+    orbit_query: Single<(&mut Transform, &mut components::OrbitCamera)>,
 ) {
-    let Ok((mut transform, mut orbit)) = query.get_single_mut() else {
-        return;
-    };
+    let (mut transform, mut orbit) = orbit_query.into_inner();
 
     if mouse_button.pressed(MouseButton::Right) {
-        for event in mouse_motion.read() {
-            orbit.alpha -= event.delta.x * 0.005;
-            orbit.beta += event.delta.y * 0.005;
-        }
+        orbit.alpha -= accumulated_mouse_motion.delta.x * 0.005;
+        orbit.beta += accumulated_mouse_motion.delta.y * 0.005;
     }
 
     orbit.beta = orbit.beta.clamp(-1.4, 1.4); // Limit pitch

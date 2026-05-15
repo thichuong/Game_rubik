@@ -8,7 +8,6 @@ pub struct RubikCube;
 #[derive(Component)]
 pub struct Cubie;
 
-
 /// Logical coordinates of a cubie in the 3x3x3 grid (-1 to 1)
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridCoord(pub IVec3);
@@ -40,12 +39,12 @@ pub struct RubikMaterials {
 /// Enum representing the 6 faces of a cube
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Face {
-    Up,     // +Y (White)
-    Down,   // -Y (Yellow)
-    Right,  // +X (Red)
-    Left,   // -X (Orange)
-    Front,  // +Z (Green)
-    Back,   // -Z (Blue)
+    Up,    // +Y (White)
+    Down,  // -Y (Yellow)
+    Right, // +X (Red)
+    Left,  // -X (Orange)
+    Front, // +Z (Green)
+    Back,  // -Z (Blue)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,4 +144,3 @@ pub struct OrbitCamera {
     pub alpha: f32, // Horizontal angle (yaw)
     pub beta: f32,  // Vertical angle (pitch)
 }
-
