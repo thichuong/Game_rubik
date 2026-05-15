@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.18", features = ["default"] }
+rand = { version = "0.10.1", features = ["thread_rng"] }
 # bevy_mod_picking = "0.20" # If needed, but Bevy 0.15 has picking built-in
 # Note: As of my latest check, Bevy 0.15 is the stable target for modern picking.
 # If 0.18 is available, I will adjust, but 0.15 is safe for current features.

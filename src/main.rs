@@ -1,11 +1,13 @@
 mod components;
 mod input;
 mod rubik;
+mod ui;
 
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use input::InputPlugin;
 use rubik::RubikPlugin;
+use ui::UiPlugin;
 
 fn main() {
     App::new()
@@ -20,6 +22,7 @@ fn main() {
         .add_plugins(MeshPickingPlugin)
         .add_plugins(RubikPlugin)
         .add_plugins(InputPlugin)
+        .add_plugins(UiPlugin)
         .add_systems(Startup, setup_scene)
         .add_systems(Update, update_camera_orbit)
         .run();
