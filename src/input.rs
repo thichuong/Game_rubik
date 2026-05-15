@@ -1,5 +1,5 @@
 use crate::components::{
-    CubieFace, Direction, DragState, Face, GridCoord, MoveHistory, RotationAxis, RotationMove,
+    CubieFace, Direction, DragState, GridCoord, MoveHistory, RotationAxis, RotationMove,
     RotationQueue,
 };
 use bevy::ecs::observer::On;
@@ -81,12 +81,14 @@ fn handle_keyboard_input(
 fn handle_drag_start(
     trigger: On<Pointer<DragStart>>,
     mut drag_state: ResMut<DragState>,
-    face_query: Query<&CubieFace>,
+    face_query: Query<(&CubieFace, &GlobalTransform)>,
 ) {
     let entity = trigger.entity;
-    if let Ok(cubie_face) = face_query.get(entity) {
+    if let Ok((_, transform)) = face_query.get(entity) {
         if let Some(pos) = trigger.hit.position {
-            drag_state.start_face = Some((entity, cubie_face.face, pos));
+            // In Bevy, the "back" of the face (+Z) is its world normal
+            let normal = *transform.back();
+            drag_state.start_face = Some((entity, normal, pos));
         }
     }
 }
@@ -99,7 +101,7 @@ fn handle_drag_end(
     cubie_query: Query<&GridCoord>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
 ) {
-    if let Some((start_entity, face, start_pos)) = drag_state.start_face.take() {
+    if let Some((start_entity, normal, start_pos)) = drag_state.start_face.take() {
         let (camera, camera_transform) = *camera_query;
 
         let location = trigger.pointer_location.position;
@@ -107,12 +109,8 @@ fn handle_drag_end(
             return;
         };
 
-        let normal = face.normal();
         let distance = ray
-            .intersect_plane(
-                start_pos,
-                InfinitePlane3d::new(Dir3::new(normal).unwrap_or(Dir3::Y)),
-            )
+            .intersect_plane(start_pos, InfinitePlane3d::new(normal))
             .unwrap_or(0.0);
         let end_pos = ray.get_point(distance);
 
@@ -120,7 +118,7 @@ fn handle_drag_end(
         if delta.length() > 0.4 {
             if let Ok((_, child_of)) = face_query.get(start_entity) {
                 if let Ok(grid_coord) = cubie_query.get(child_of.0) {
-                    if let Some(rm) = determine_move_robust(face, grid_coord.0, delta) {
+                    if let Some(rm) = determine_move_robust(normal, grid_coord.0, delta) {
                         rotation_queue.0.push_back(rm);
                     }
                 }
@@ -129,8 +127,7 @@ fn handle_drag_end(
     }
 }
 
-fn determine_move_robust(face: Face, coord: IVec3, delta: Vec3) -> Option<RotationMove> {
-    let normal = face.normal();
+fn determine_move_robust(normal: Vec3, coord: IVec3, delta: Vec3) -> Option<RotationMove> {
     // Drag vector in the plane of the face (remove normal component)
     let drag_vec = delta - delta.dot(normal) * normal;
 

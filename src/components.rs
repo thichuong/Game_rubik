@@ -151,14 +151,12 @@ impl Face {
 
 /// Component attached to each colored face of a cubie
 #[derive(Component)]
-pub struct CubieFace {
-    pub face: Face,
-}
+pub struct CubieFace;
 
 /// Resource to track mouse drag for rotation
 #[derive(Resource, Default)]
 pub struct DragState {
-    pub start_face: Option<(Entity, Face, Vec3)>,
+    pub start_face: Option<(Entity, Vec3, Vec3)>,
 }
 
 /// Component for the orbiting camera
