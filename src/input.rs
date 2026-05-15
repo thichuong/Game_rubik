@@ -27,37 +27,43 @@ fn handle_keyboard_input(
 
     if keyboard_input.just_pressed(KeyCode::KeyR) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Right,
+            axis: RotationAxis::X,
+            index: 1,
             direction,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyL) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Left,
+            axis: RotationAxis::X,
+            index: -1,
             direction,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyU) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Up,
+            axis: RotationAxis::Y,
+            index: 1,
             direction,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyD) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Down,
+            axis: RotationAxis::Y,
+            index: -1,
             direction,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyF) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Front,
+            axis: RotationAxis::Z,
+            index: 1,
             direction,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyB) {
         rotation_queue.0.push_back(RotationMove {
-            side: Side::Back,
+            axis: RotationAxis::Z,
+            index: -1,
             direction,
         });
     }
@@ -114,64 +120,42 @@ fn handle_drag_end(
     }
 }
 
-/// Robustly determine the rotation move based on face normal and drag vector
 fn determine_move_robust(face: Face, coord: IVec3, delta: Vec3) -> Option<RotationMove> {
     let normal = face.normal();
-    // Drag vector in the plane of the face
+    // Drag vector in the plane of the face (remove normal component)
     let drag_vec = delta - delta.dot(normal) * normal;
 
-    // The rotation axis should be perpendicular to both the face normal and the drag vector
-    let raw_axis = normal.cross(drag_vec);
+    if drag_vec.length() < 0.1 {
+        return None;
+    }
 
-    // Quantize the axis to the closest world axis
-    let axis = if raw_axis.x.abs() > raw_axis.y.abs() && raw_axis.x.abs() > raw_axis.z.abs() {
-        Vec3::X * raw_axis.x.signum()
-    } else if raw_axis.y.abs() > raw_axis.z.abs() {
-        Vec3::Y * raw_axis.y.signum()
+    // The rotation axis is perpendicular to both the face normal and the drag direction
+    let raw_rotation_axis = normal.cross(drag_vec);
+
+    // Find the dominant axis of rotation
+    let (axis, index) = if raw_rotation_axis.x.abs() > raw_rotation_axis.y.abs()
+        && raw_rotation_axis.x.abs() > raw_rotation_axis.z.abs()
+    {
+        (RotationAxis::X, coord.x)
+    } else if raw_rotation_axis.y.abs() > raw_rotation_axis.z.abs() {
+        (RotationAxis::Y, coord.y)
     } else {
-        Vec3::Z * raw_axis.z.signum()
+        (RotationAxis::Z, coord.z)
     };
 
-    // Determine the side and direction
-    // If axis is X, we are rotating a slice around X axis.
-    // The slice is determined by coord.x
-    let side = if axis.x.abs() > 0.5 {
-        match coord.x {
-            1 => Side::Right,
-            -1 => Side::Left,
-            _ => return None, // Middle slice (could be handled but keeping it simple)
-        }
-    } else if axis.y.abs() > 0.5 {
-        match coord.y {
-            1 => Side::Up,
-            -1 => Side::Down,
-            _ => return None,
-        }
-    } else {
-        match coord.z {
-            1 => Side::Front,
-            -1 => Side::Back,
-            _ => return None,
-        }
-    };
-
-    // Direction logic:
-    // If our quantized axis is in the same direction as the side's normal, it's Clockwise.
-    // Otherwise, it's CounterClockwise.
-    let side_normal = match side {
-        Side::Right => Vec3::X,
-        Side::Left => Vec3::NEG_X,
-        Side::Up => Vec3::Y,
-        Side::Down => Vec3::NEG_Y,
-        Side::Front => Vec3::Z,
-        Side::Back => Vec3::NEG_Z,
-    };
-
-    let direction = if axis.dot(side_normal) > 0.0 {
+    // Determine direction:
+    // If the raw rotation axis is in the same direction as the quantized axis,
+    // we want a CounterClockwise rotation around that axis (positive angle).
+    let axis_vec = axis.vector();
+    let direction = if raw_rotation_axis.dot(axis_vec) > 0.0 {
         Direction::CounterClockwise
     } else {
         Direction::Clockwise
     };
 
-    Some(RotationMove { side, direction })
+    Some(RotationMove {
+        axis,
+        index,
+        direction,
+    })
 }

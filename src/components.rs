@@ -48,13 +48,20 @@ pub enum Face {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    Up,
-    Down,
-    Right,
-    Left,
-    Front,
-    Back,
+pub enum RotationAxis {
+    X,
+    Y,
+    Z,
+}
+
+impl RotationAxis {
+    pub fn vector(&self) -> Vec3 {
+        match self {
+            RotationAxis::X => Vec3::X,
+            RotationAxis::Y => Vec3::Y,
+            RotationAxis::Z => Vec3::Z,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +71,8 @@ pub enum Direction {
 }
 
 pub struct RotationMove {
-    pub side: Side,
+    pub axis: RotationAxis,
+    pub index: i32, // -1, 0, or 1
     pub direction: Direction,
 }
 
@@ -73,41 +81,30 @@ pub struct RotationQueue(pub std::collections::VecDeque<RotationMove>);
 
 #[derive(Resource)]
 pub struct CurrentlyRotating {
-    pub side: Side,
+    pub axis: RotationAxis,
+    pub index: i32,
     pub direction: Direction,
     pub timer: Timer,
-    pub axis: Vec3,
+    pub rotation_axis: Vec3, // Actual vector for Quat
     pub angle: f32,
     pub cubies: Vec<Entity>,
 }
 
-impl Side {
-    pub fn get_rotation_info(&self, direction: Direction) -> (Vec3, f32) {
-        let (axis, angle_base) = match self {
-            Side::Right => (Vec3::X, 1.0),
-            Side::Left => (Vec3::NEG_X, 1.0),
-            Side::Up => (Vec3::Y, 1.0),
-            Side::Down => (Vec3::NEG_Y, 1.0),
-            Side::Front => (Vec3::Z, 1.0),
-            Side::Back => (Vec3::NEG_Z, 1.0),
+impl RotationMove {
+    pub fn get_rotation_info(&self) -> (Vec3, f32) {
+        let axis_vec = self.axis.vector();
+        let angle = match self.direction {
+            Direction::Clockwise => -std::f32::consts::FRAC_PI_2,
+            Direction::CounterClockwise => std::f32::consts::FRAC_PI_2,
         };
-
-        let angle = match direction {
-            Direction::Clockwise => std::f32::consts::FRAC_PI_2 * angle_base,
-            Direction::CounterClockwise => -std::f32::consts::FRAC_PI_2 * angle_base,
-        };
-
-        (axis, angle)
+        (axis_vec, angle)
     }
 
-    pub fn is_cubie_at_side(&self, coord: IVec3) -> bool {
-        match self {
-            Side::Right => coord.x == 1,
-            Side::Left => coord.x == -1,
-            Side::Up => coord.y == 1,
-            Side::Down => coord.y == -1,
-            Side::Front => coord.z == 1,
-            Side::Back => coord.z == -1,
+    pub fn is_cubie_at_slice(&self, coord: IVec3) -> bool {
+        match self.axis {
+            RotationAxis::X => coord.x == self.index,
+            RotationAxis::Y => coord.y == self.index,
+            RotationAxis::Z => coord.z == self.index,
         }
     }
 }

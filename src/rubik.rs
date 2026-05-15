@@ -190,9 +190,7 @@ fn handle_rotation_queue(
     let root_entity = *cube_root;
 
     if let Some(rotation_move) = queue.0.pop_front() {
-        let (axis, angle) = rotation_move
-            .side
-            .get_rotation_info(rotation_move.direction);
+        let (axis_vec, angle) = rotation_move.get_rotation_info();
 
         let pivot_id = commands
             .spawn((
@@ -200,7 +198,7 @@ fn handle_rotation_queue(
                 Transform::IDENTITY,
                 Visibility::default(),
                 InheritedVisibility::default(),
-                TargetRotation(Quat::from_axis_angle(axis, angle)),
+                TargetRotation(Quat::from_axis_angle(axis_vec, angle)),
             ))
             .id();
 
@@ -208,17 +206,18 @@ fn handle_rotation_queue(
 
         let mut rotating_cubies = Vec::new();
         for (entity, coord) in cubies.iter() {
-            if rotation_move.side.is_cubie_at_side(coord.0) {
+            if rotation_move.is_cubie_at_slice(coord.0) {
                 commands.entity(entity).insert(ChildOf(pivot_id));
                 rotating_cubies.push(entity);
             }
         }
 
         commands.insert_resource(CurrentlyRotating {
-            side: rotation_move.side,
+            axis: rotation_move.axis,
+            index: rotation_move.index,
             direction: rotation_move.direction,
             timer: Timer::from_seconds(0.25, TimerMode::Once),
-            axis,
+            rotation_axis: axis_vec,
             angle,
             cubies: rotating_cubies,
         });
@@ -249,7 +248,7 @@ fn animate_rotation(
         for &cubie_entity in &current.cubies {
             if let Ok((mut transform, mut coord)) = cubie_query.get_mut(cubie_entity) {
                 // Logic update
-                coord.rotate(current.axis, current.angle);
+                coord.rotate(current.rotation_axis, current.angle);
 
                 // SNAP: Reset transform relative to RubikCube
                 // Position must be exactly GAP * GridCoord
@@ -257,7 +256,7 @@ fn animate_rotation(
 
                 // Rotation must be exactly a multiple of 90 degrees
                 // We apply the rotation step to the PREVIOUS rotation
-                let rot_step = Quat::from_axis_angle(current.axis, current.angle);
+                let rot_step = Quat::from_axis_angle(current.rotation_axis, current.angle);
                 transform.rotation = (rot_step * transform.rotation).normalize();
 
                 // Re-attach to root
