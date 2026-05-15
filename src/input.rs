@@ -159,6 +159,10 @@ fn determine_move_robust(normal: Vec3, coord: IVec3, delta: Vec3) -> Option<Rota
         Direction::Clockwise
     };
 
+    if index == 0 {
+        return None;
+    }
+
     Some(RotationMove {
         axis,
         index,

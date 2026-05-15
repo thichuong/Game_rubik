@@ -17,14 +17,17 @@ struct ShuffleButton;
 /// Set up the UI with a premium look
 fn setup_ui(mut commands: Commands) {
     commands
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::FlexEnd,
-            align_items: AlignItems::FlexEnd,
-            padding: UiRect::all(Val::Px(40.0)),
-            ..default()
-        })
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::FlexEnd,
+                align_items: AlignItems::FlexEnd,
+                padding: UiRect::all(Val::Px(40.0)),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
         .with_children(|parent| {
             parent
                 .spawn(Button)
@@ -60,7 +63,11 @@ fn setup_ui(mut commands: Commands) {
 type InteractionQuery<'w, 's> = Query<
     'w,
     's,
-    (&'static Interaction, &'static mut BackgroundColor, &'static mut BorderColor),
+    (
+        &'static Interaction,
+        &'static mut BackgroundColor,
+        &'static mut BorderColor,
+    ),
     (Changed<Interaction>, With<ShuffleButton>),
 >;
 
@@ -83,7 +90,7 @@ fn handle_shuffle_button(
                         1 => RotationAxis::Y,
                         _ => RotationAxis::Z,
                     };
-                    let index = rng.random_range(-1..=1);
+                    let index = if rng.random_bool(0.5) { -1 } else { 1 };
                     let direction = if rng.random_bool(0.5) {
                         Direction::Clockwise
                     } else {
