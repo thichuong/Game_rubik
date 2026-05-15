@@ -1,6 +1,7 @@
 mod components;
 mod input;
 mod rubik;
+mod solver;
 mod ui;
 
 use bevy::input::mouse::AccumulatedMouseMotion;
@@ -20,6 +21,9 @@ fn main() {
             ..default()
         }))
         .add_plugins(MeshPickingPlugin)
+        .insert_resource(solver::SolverResource {
+            table: kewb::DataTable::default(),
+        })
         .add_plugins(RubikPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(UiPlugin)

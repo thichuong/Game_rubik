@@ -178,7 +178,7 @@ fn spawn_face(
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
             Transform::from_translation(translation).with_rotation(rotation),
-            CubieFace,
+            CubieFace(face),
         ))
         .id();
     commands.entity(parent).add_child(face_id);

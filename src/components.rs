@@ -149,9 +149,10 @@ impl Face {
     }
 }
 
-/// Component attached to each colored face of a cubie
-#[derive(Component)]
-pub struct CubieFace;
+/// Component attached to each colored face of a cubie.
+/// Holds the initial face orientation which defines its color.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct CubieFace(pub Face);
 
 /// Resource to track mouse drag for rotation
 #[derive(Resource, Default)]
