@@ -1,0 +1,16 @@
+[package]
+name = "game_rubik"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.15", features = ["default"] }
+# bevy_mod_picking = "0.20" # If needed, but Bevy 0.15 has picking built-in
+# Note: As of my latest check, Bevy 0.15 is the stable target for modern picking.
+# If 0.18 is available, I will adjust, but 0.15 is safe for current features.
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
