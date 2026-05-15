@@ -7,7 +7,7 @@ pub struct InputPlugin;
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DragState>()
-            .add_systems(Update, handle_keyboard_input)
+            .add_systems(Update, (handle_keyboard_input, handle_undo_redo))
             .add_observer(handle_drag_start)
             .add_observer(handle_drag_end);
     }
@@ -30,6 +30,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::X,
             index: 1,
             direction,
+            add_to_history: true,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyL) {
@@ -37,6 +38,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::X,
             index: -1,
             direction,
+            add_to_history: true,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyU) {
@@ -44,6 +46,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::Y,
             index: 1,
             direction,
+            add_to_history: true,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyD) {
@@ -51,6 +54,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::Y,
             index: -1,
             direction,
+            add_to_history: true,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyF) {
@@ -58,6 +62,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::Z,
             index: 1,
             direction,
+            add_to_history: true,
         });
     }
     if keyboard_input.just_pressed(KeyCode::KeyB) {
@@ -65,6 +70,7 @@ fn handle_keyboard_input(
             axis: RotationAxis::Z,
             index: -1,
             direction,
+            add_to_history: true,
         });
     }
 }
@@ -157,5 +163,41 @@ fn determine_move_robust(face: Face, coord: IVec3, delta: Vec3) -> Option<Rotati
         axis,
         index,
         direction,
+        add_to_history: true,
     })
+}
+
+fn handle_undo_redo(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut history: ResMut<MoveHistory>,
+    mut rotation_queue: ResMut<RotationQueue>,
+) {
+    let ctrl = keyboard_input.pressed(KeyCode::ControlLeft)
+        || keyboard_input.pressed(KeyCode::ControlRight);
+    let shift =
+        keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight);
+
+    if ctrl && keyboard_input.just_pressed(KeyCode::KeyZ) {
+        if shift {
+            // Redo (Ctrl+Shift+Z)
+            if let Some(m) = history.undone.pop() {
+                rotation_queue.0.push_back(m);
+                history.done.push(m);
+            }
+        } else {
+            // Undo (Ctrl+Z)
+            if let Some(m) = history.done.pop() {
+                rotation_queue.0.push_back(m.inverse());
+                history.undone.push(m);
+            }
+        }
+    }
+
+    if ctrl && keyboard_input.just_pressed(KeyCode::KeyY) {
+        // Redo (Ctrl+Y)
+        if let Some(m) = history.undone.pop() {
+            rotation_queue.0.push_back(m);
+            history.done.push(m);
+        }
+    }
 }

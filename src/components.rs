@@ -70,14 +70,31 @@ pub enum Direction {
     CounterClockwise,
 }
 
+impl Direction {
+    pub fn inverse(&self) -> Self {
+        match self {
+            Direction::Clockwise => Direction::CounterClockwise,
+            Direction::CounterClockwise => Direction::Clockwise,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationMove {
     pub axis: RotationAxis,
     pub index: i32, // -1, 0, or 1
     pub direction: Direction,
+    pub add_to_history: bool,
 }
 
 #[derive(Resource, Default)]
 pub struct RotationQueue(pub std::collections::VecDeque<RotationMove>);
+
+#[derive(Resource, Default)]
+pub struct MoveHistory {
+    pub done: Vec<RotationMove>,
+    pub undone: Vec<RotationMove>,
+}
 
 #[derive(Resource)]
 pub struct CurrentlyRotating {
@@ -88,9 +105,19 @@ pub struct CurrentlyRotating {
     pub rotation_axis: Vec3, // Actual vector for Quat
     pub angle: f32,
     pub cubies: Vec<Entity>,
+    pub add_to_history: bool,
 }
 
 impl RotationMove {
+    pub fn inverse(&self) -> Self {
+        Self {
+            axis: self.axis,
+            index: self.index,
+            direction: self.direction.inverse(),
+            add_to_history: false,
+        }
+    }
+
     pub fn get_rotation_info(&self) -> (Vec3, f32) {
         let axis_vec = self.axis.vector();
         let angle = match self.direction {

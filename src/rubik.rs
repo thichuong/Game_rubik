@@ -11,6 +11,7 @@ const GAP: f32 = 1.02; // Small gap between cubies
 impl Plugin for RubikPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RotationQueue>()
+            .init_resource::<MoveHistory>()
             .add_systems(Startup, (setup_materials, spawn_rubik_cube).chain())
             .add_systems(Update, (handle_rotation_queue, animate_rotation));
     }
@@ -220,6 +221,7 @@ fn handle_rotation_queue(
             rotation_axis: axis_vec,
             angle,
             cubies: rotating_cubies,
+            add_to_history: rotation_move.add_to_history,
         });
     }
 }
@@ -231,6 +233,7 @@ fn animate_rotation(
     pivot_query: Single<(Entity, &mut Transform, &TargetRotation), With<Pivot>>,
     mut cubie_query: Query<(&mut Transform, &mut GridCoord), (With<Cubie>, Without<Pivot>)>,
     cube_root: Single<Entity, With<RubikCube>>,
+    mut history: ResMut<MoveHistory>,
 ) {
     let Some(mut current) = current else { return };
     let (pivot_entity, mut pivot_transform, target) = pivot_query.into_inner();
@@ -262,6 +265,16 @@ fn animate_rotation(
                 // Re-attach to root
                 commands.entity(cubie_entity).insert(ChildOf(root_entity));
             }
+        }
+
+        if current.add_to_history {
+            history.done.push(RotationMove {
+                axis: current.axis,
+                index: current.index,
+                direction: current.direction,
+                add_to_history: false,
+            });
+            history.undone.clear();
         }
 
         commands.entity(pivot_entity).despawn();
