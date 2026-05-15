@@ -1,10 +1,16 @@
-use crate::components::*;
+use crate::components::{
+    Cubie, CubieFace, CurrentlyRotating, Face, GridCoord, MoveHistory, RotationMove, RotationQueue,
+    RubikCube, RubikMaterials, TargetRotation,
+};
 use bevy::prelude::*;
 
 pub struct RubikPlugin;
 
 #[derive(Component)]
 struct Pivot;
+
+type CubieQueryData = (&'static mut Transform, &'static mut GridCoord);
+type CubieQueryFilter = (With<Cubie>, Without<Pivot>);
 
 const GAP: f32 = 1.02; // Small gap between cubies
 
@@ -231,7 +237,7 @@ fn animate_rotation(
     time: Res<Time>,
     current: Option<ResMut<CurrentlyRotating>>,
     pivot_query: Single<(Entity, &mut Transform, &TargetRotation), With<Pivot>>,
-    mut cubie_query: Query<(&mut Transform, &mut GridCoord), (With<Cubie>, Without<Pivot>)>,
+    mut cubie_query: Query<CubieQueryData, CubieQueryFilter>,
     cube_root: Single<Entity, With<RubikCube>>,
     mut history: ResMut<MoveHistory>,
 ) {
@@ -243,7 +249,7 @@ fn animate_rotation(
     let progress = current.timer.fraction();
 
     // Ease Out Quad
-    let eased_progress = 1.0 - (1.0 - progress) * (1.0 - progress);
+    let eased_progress = (1.0 - progress).mul_add(-(1.0 - progress), 1.0);
     pivot_transform.rotation = Quat::IDENTITY.slerp(target.0, eased_progress);
 
     if current.timer.is_finished() {

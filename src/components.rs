@@ -55,11 +55,11 @@ pub enum RotationAxis {
 }
 
 impl RotationAxis {
-    pub fn vector(&self) -> Vec3 {
+    pub const fn vector(self) -> Vec3 {
         match self {
-            RotationAxis::X => Vec3::X,
-            RotationAxis::Y => Vec3::Y,
-            RotationAxis::Z => Vec3::Z,
+            Self::X => Vec3::X,
+            Self::Y => Vec3::Y,
+            Self::Z => Vec3::Z,
         }
     }
 }
@@ -71,10 +71,10 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub fn inverse(&self) -> Self {
+    pub const fn inverse(self) -> Self {
         match self {
-            Direction::Clockwise => Direction::CounterClockwise,
-            Direction::CounterClockwise => Direction::Clockwise,
+            Self::Clockwise => Self::CounterClockwise,
+            Self::CounterClockwise => Self::Clockwise,
         }
     }
 }
@@ -109,7 +109,7 @@ pub struct CurrentlyRotating {
 }
 
 impl RotationMove {
-    pub fn inverse(&self) -> Self {
+    pub const fn inverse(self) -> Self {
         Self {
             axis: self.axis,
             index: self.index,
@@ -118,7 +118,7 @@ impl RotationMove {
         }
     }
 
-    pub fn get_rotation_info(&self) -> (Vec3, f32) {
+    pub fn get_rotation_info(self) -> (Vec3, f32) {
         let axis_vec = self.axis.vector();
         let angle = match self.direction {
             Direction::Clockwise => -std::f32::consts::FRAC_PI_2,
@@ -127,7 +127,7 @@ impl RotationMove {
         (axis_vec, angle)
     }
 
-    pub fn is_cubie_at_slice(&self, coord: IVec3) -> bool {
+    pub const fn is_cubie_at_slice(self, coord: IVec3) -> bool {
         match self.axis {
             RotationAxis::X => coord.x == self.index,
             RotationAxis::Y => coord.y == self.index,
@@ -137,14 +137,14 @@ impl RotationMove {
 }
 
 impl Face {
-    pub fn normal(&self) -> Vec3 {
+    pub const fn normal(self) -> Vec3 {
         match self {
-            Face::Up => Vec3::Y,
-            Face::Down => Vec3::NEG_Y,
-            Face::Right => Vec3::X,
-            Face::Left => Vec3::NEG_X,
-            Face::Front => Vec3::Z,
-            Face::Back => Vec3::NEG_Z,
+            Self::Up => Vec3::Y,
+            Self::Down => Vec3::NEG_Y,
+            Self::Right => Vec3::X,
+            Self::Left => Vec3::NEG_X,
+            Self::Front => Vec3::Z,
+            Self::Back => Vec3::NEG_Z,
         }
     }
 }
