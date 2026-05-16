@@ -1,53 +1,53 @@
-use crate::components::{
-    CubieFace, Direction, RotationAxis, RotationMove, RotationQueue, RubikSkin, SkinType,
-};
-use crate::solver;
+use crate::events::ResetCameraEvent;
+use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove};
+use crate::rubik::resources::{RotationQueue, RubikSkin, SkinType};
+use crate::solver::helpers;
+use crate::solver::resources::{SolverResource, StepByStepSolution};
 use bevy::prelude::*;
 use rand::RngExt;
 use std::fmt::Write;
 
-pub struct UiPlugin;
-
-impl Plugin for UiPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_ui).add_systems(
-            Update,
-            (
-                handle_shuffle_button,
-                handle_solve_button,
-                handle_next_step_button,
-                handle_close_button,
-                update_solution_panel,
-                handle_skin_button,
-            ),
-        );
-    }
-}
+#[derive(Component)]
+pub struct ShuffleButton;
 
 #[derive(Component)]
-struct ShuffleButton;
+pub struct SolveButton;
 
 #[derive(Component)]
-struct SolveButton;
+pub struct NextStepButton;
 
 #[derive(Component)]
-struct NextStepButton;
+pub struct SolutionPanel;
 
 #[derive(Component)]
-struct SolutionPanel;
+pub struct StepText;
 
 #[derive(Component)]
-struct StepText;
+pub struct CloseButton;
 
 #[derive(Component)]
-struct CloseButton;
+pub struct SkinButton(pub SkinType);
 
 #[derive(Component)]
-struct SkinButton(SkinType);
+pub struct SkinToggleButton;
+
+#[derive(Component)]
+pub struct SkinList;
+
+pub type InteractionQuery<'w, 's, T> = Query<
+    'w,
+    's,
+    (
+        &'static Interaction,
+        &'static mut BackgroundColor,
+        &'static mut BorderColor,
+    ),
+    (Changed<Interaction>, With<T>),
+>;
 
 /// Set up the UI with a premium look
 #[allow(clippy::too_many_lines)]
-fn setup_ui(mut commands: Commands) {
+pub fn setup_ui(mut commands: Commands) {
     commands
         .spawn((
             Node {
@@ -62,7 +62,7 @@ fn setup_ui(mut commands: Commands) {
             Pickable::IGNORE,
         ))
         .with_children(|parent| {
-            // SOLVE Button (Triggers Step-by-Step)
+            // SOLVE Button
             parent
                 .spawn(Button)
                 .insert(Node {
@@ -121,70 +121,98 @@ fn setup_ui(mut commands: Commands) {
                         TextColor(Color::Srgba(Srgba::WHITE)),
                     ));
                 });
+        });
 
-            // SKINS Panel (Above the buttons)
+    // TOP RIGHT Skin Panel
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(40.0),
+                right: Val::Px(40.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexEnd,
+                row_gap: Val::Px(10.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|parent| {
+            // Toggle Button
             parent
-                .spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(10.0),
-                    margin: UiRect::bottom(Val::Px(10.0)),
+                .spawn(Button)
+                .insert(Node {
+                    width: Val::Px(160.0),
+                    height: Val::Px(50.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(Val::Px(10.0)),
                     ..default()
                 })
+                .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                    0.15, 0.15, 0.25, 0.9,
+                ))))
+                .insert(SkinToggleButton)
                 .with_children(|parent| {
                     parent.spawn((
-                        Text::new("SKINS"),
+                        Text::new("SKINS ▾"),
                         TextFont {
-                            font_size: 18.0,
+                            font_size: 20.0,
                             ..default()
                         },
-                        TextColor(Color::Srgba(Srgba::new(0.8, 0.8, 0.9, 1.0))),
+                        TextColor(Color::Srgba(Srgba::WHITE)),
                     ));
+                });
 
-                    parent
-                        .spawn(Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: Val::Px(10.0),
-                            ..default()
-                        })
-                        .with_children(|parent| {
-                            let skins = [
-                                (SkinType::Classic, "Classic"),
-                                (SkinType::Carbon, "Carbon"),
-                                (SkinType::Geometric, "Geo"),
-                                (SkinType::Floral, "Floral"),
-                            ];
+            // Skin List
+            parent
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(5.0),
+                        display: Display::None,
+                        ..default()
+                    },
+                    SkinList,
+                ))
+                .with_children(|parent| {
+                    let skins = [
+                        (SkinType::Classic, "Classic"),
+                        (SkinType::Carbon, "Carbon Fiber"),
+                        (SkinType::Geometric, "Geometric"),
+                        (SkinType::Floral, "Floral Pattern"),
+                    ];
 
-                            for (skin_type, label) in skins {
-                                parent
-                                    .spawn(Button)
-                                    .insert(Node {
-                                        width: Val::Px(80.0),
-                                        height: Val::Px(40.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                    for (skin_type, label) in skins {
+                        parent
+                            .spawn(Button)
+                            .insert(Node {
+                                width: Val::Px(160.0),
+                                height: Val::Px(45.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border_radius: BorderRadius::all(Val::Px(8.0)),
+                                ..default()
+                            })
+                            .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                                0.2, 0.2, 0.2, 0.8,
+                            ))))
+                            .insert(SkinButton(skin_type))
+                            .with_children(|parent| {
+                                parent.spawn((
+                                    Text::new(label),
+                                    TextFont {
+                                        font_size: 16.0,
                                         ..default()
-                                    })
-                                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                                        0.2, 0.2, 0.25, 0.8,
-                                    ))))
-                                    .insert(SkinButton(skin_type))
-                                    .with_children(|parent| {
-                                        parent.spawn((
-                                            Text::new(label),
-                                            TextFont {
-                                                font_size: 14.0,
-                                                ..default()
-                                            },
-                                            TextColor(Color::Srgba(Srgba::WHITE)),
-                                        ));
-                                    });
-                            }
-                        });
+                                    },
+                                    TextColor(Color::Srgba(Srgba::WHITE)),
+                                ));
+                            });
+                    }
                 });
         });
 
-    // Solution Panel (Top left)
+    // Solution Panel
     commands
         .spawn((
             Node {
@@ -204,7 +232,6 @@ fn setup_ui(mut commands: Commands) {
             SolutionPanel,
         ))
         .with_children(|parent| {
-            // Close Button
             parent
                 .spawn(Button)
                 .insert(Node {
@@ -253,7 +280,6 @@ fn setup_ui(mut commands: Commands) {
                 },
             ));
 
-            // Next Step Button
             parent
                 .spawn(Button)
                 .insert(Node {
@@ -279,7 +305,7 @@ fn setup_ui(mut commands: Commands) {
                     ));
                 });
 
-            // Face Legend (Added back as labels on Rubik are disabled)
+            // Face Legend
             parent
                 .spawn(Node {
                     margin: UiRect::top(Val::Px(15.0)),
@@ -310,19 +336,7 @@ fn setup_ui(mut commands: Commands) {
         });
 }
 
-type InteractionQuery<'w, 's, T> = Query<
-    'w,
-    's,
-    (
-        &'static Interaction,
-        &'static mut BackgroundColor,
-        &'static mut BorderColor,
-    ),
-    (Changed<Interaction>, With<T>),
->;
-
-/// Handle shuffle button interaction
-fn handle_shuffle_button(
+pub fn handle_shuffle_button(
     mut interaction_query: InteractionQuery<ShuffleButton>,
     mut rotation_queue: ResMut<RotationQueue>,
 ) {
@@ -366,13 +380,12 @@ fn handle_shuffle_button(
     }
 }
 
-/// Handle solve button interaction (enters step-by-step mode)
-fn handle_solve_button(
+pub fn handle_solve_button(
     mut interaction_query: InteractionQuery<SolveButton>,
-    mut solution: ResMut<crate::components::StepByStepSolution>,
-    mut reset_camera: MessageWriter<crate::components::ResetCameraEvent>,
+    mut solution: ResMut<StepByStepSolution>,
+    mut reset_camera: MessageWriter<ResetCameraEvent>,
     faces: Query<(&CubieFace, &GlobalTransform)>,
-    solver_res: Res<solver::SolverResource>,
+    solver_res: Res<SolverResource>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -380,15 +393,13 @@ fn handle_solve_button(
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.8, 0.3, 1.0)));
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.5, 1.0, 0.5, 1.0)));
 
-                // Trigger camera reset and labels
-                reset_camera.write(crate::components::ResetCameraEvent);
+                reset_camera.write(ResetCameraEvent);
 
-                // Set active immediately to show labels and panel
                 solution.active = true;
                 solution.moves.clear();
                 solution.current_step = 0;
 
-                let state_str = solver::get_cube_state(&faces);
+                let state_str = helpers::get_cube_state(&faces);
 
                 match kewb::FaceCube::try_from(state_str.as_str()) {
                     Ok(face_cube) => match kewb::CubieCube::try_from(&face_cube) {
@@ -407,7 +418,6 @@ fn handle_solve_button(
                     Err(e) => error!("Failed to parse face cube: {:?}", e),
                 }
             }
-
             Interaction::Hovered => {
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.3, 0.2, 0.9)));
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.4, 0.6, 0.4, 1.0)));
@@ -420,10 +430,9 @@ fn handle_solve_button(
     }
 }
 
-/// Handle next step button interaction
-fn handle_next_step_button(
+pub fn handle_next_step_button(
     mut interaction_query: InteractionQuery<NextStepButton>,
-    mut solution: ResMut<crate::components::StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
     mut rotation_queue: ResMut<RotationQueue>,
 ) {
     for (interaction, mut bg_color, _) in &mut interaction_query {
@@ -433,7 +442,7 @@ fn handle_next_step_button(
 
                 if solution.active && solution.current_step < solution.moves.len() {
                     let move_str = &solution.moves[solution.current_step];
-                    let moves = solver::solution_to_moves(move_str);
+                    let moves = helpers::solution_to_moves(move_str);
                     for m in moves {
                         rotation_queue.0.push_back(m);
                     }
@@ -450,9 +459,8 @@ fn handle_next_step_button(
     }
 }
 
-/// Update the visibility and content of the solution panel
-fn update_solution_panel(
-    solution: Res<crate::components::StepByStepSolution>,
+pub fn update_solution_panel(
+    solution: Res<StepByStepSolution>,
     mut panel: Single<&mut Node, With<SolutionPanel>>,
     mut text: Single<&mut Text, With<StepText>>,
 ) {
@@ -487,10 +495,9 @@ fn update_solution_panel(
     }
 }
 
-/// Handle close button interaction
-fn handle_close_button(
+pub fn handle_close_button(
     mut interaction_query: Query<&Interaction, (Changed<Interaction>, With<CloseButton>)>,
-    mut solution: ResMut<crate::components::StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     for interaction in &mut interaction_query {
         if matches!(*interaction, Interaction::Pressed) {
@@ -499,29 +506,66 @@ fn handle_close_button(
     }
 }
 
-/// Handle skin button interaction
-fn handle_skin_button(
-    mut interaction_query: Query<
-        (&Interaction, &SkinButton, &mut BackgroundColor),
-        Changed<Interaction>,
-    >,
+pub type SkinButtonQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Interaction,
+        &'static SkinButton,
+        &'static mut BackgroundColor,
+    ),
+    (With<Button>, Without<SkinToggleButton>),
+>;
+
+pub fn handle_skin_button(
+    mut interaction_query: SkinButtonQuery,
     mut rubik_skin: ResMut<RubikSkin>,
 ) {
     for (interaction, skin_btn, mut bg_color) in &mut interaction_query {
+        let is_selected = rubik_skin.current == skin_btn.0;
+
         match *interaction {
             Interaction::Pressed => {
                 rubik_skin.current = skin_btn.0;
-                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.8, 1.0)));
             }
             Interaction::Hovered => {
-                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.3, 0.4, 0.9)));
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.5, 1.0)));
             }
             Interaction::None => {
-                if rubik_skin.current == skin_btn.0 {
-                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.3, 0.6, 1.0)));
+                if is_selected {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.5, 0.9, 1.0)));
                 } else {
-                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.8)));
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.85)));
                 }
+            }
+        }
+    }
+}
+
+pub type SkinToggleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor),
+    (Changed<Interaction>, With<SkinToggleButton>),
+>;
+
+pub fn handle_skin_toggle(
+    mut interaction_query: SkinToggleQuery,
+    mut skin_list: Single<&mut Node, With<SkinList>>,
+    mut state: Local<bool>,
+) {
+    for (interaction, mut bg_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *state = !*state;
+                skin_list.display = if *state { Display::Flex } else { Display::None };
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.3, 0.5, 1.0)));
+            }
+            Interaction::Hovered => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.25, 0.4, 0.95)));
+            }
+            Interaction::None => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.15, 0.25, 0.9)));
             }
         }
     }

@@ -1,48 +1,14 @@
-use crate::components::{
-    Cubie, CubieFace, CurrentlyRotating, Face, GridCoord, MoveHistory, RotationMove, RotationQueue,
-    RubikCube, RubikMaterials, RubikSkin, SkinType, TargetRotation,
+use crate::rubik::components::{
+    Cubie, CubieFace, Face, GridCoord, Pivot, RotationMove, RubikCube, TargetRotation,
+};
+use crate::rubik::resources::{
+    CurrentlyRotating, MoveHistory, RotationQueue, RubikMaterials, RubikSkin, SkinType,
 };
 use bevy::prelude::*;
 
-pub struct RubikPlugin;
+pub const GAP: f32 = 1.02; // Small gap between cubies
 
-#[derive(Component)]
-struct Pivot;
-
-type CubieQueryData = (&'static mut Transform, &'static mut GridCoord);
-type CubieQueryFilter = (With<Cubie>, Without<Pivot>);
-
-const GAP: f32 = 1.02; // Small gap between cubies
-
-impl Plugin for RubikPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<RotationQueue>()
-            .init_resource::<MoveHistory>()
-            .init_resource::<RubikSkin>()
-            .add_systems(Startup, (setup_materials, spawn_rubik_cube).chain())
-            .add_systems(
-                Update,
-                (
-                    handle_rotation_queue,
-                    animate_rotation,
-                    handle_camera_reset,
-                    update_skins,
-                ),
-            );
-    }
-}
-
-fn handle_camera_reset(
-    mut events: MessageReader<crate::components::ResetCameraEvent>,
-    mut orbit: Single<&mut crate::components::OrbitCamera>,
-) {
-    for _ in events.read() {
-        orbit.alpha = 0.785;
-        orbit.beta = 0.785;
-    }
-}
-
-fn setup_materials(
+pub fn setup_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -102,7 +68,7 @@ fn setup_materials(
     commands.insert_resource(rubik_materials);
 }
 
-fn update_skins(
+pub fn update_skins(
     skin: Res<RubikSkin>,
     rubik_materials: Res<RubikMaterials>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -118,7 +84,6 @@ fn update_skins(
         SkinType::Floral => Some(rubik_materials.floral_tex.clone()),
     };
 
-    // Update all face materials
     let face_materials = [
         &rubik_materials.white,
         &rubik_materials.yellow,
@@ -135,7 +100,7 @@ fn update_skins(
     }
 }
 
-fn spawn_rubik_cube(
+pub fn spawn_rubik_cube(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<RubikMaterials>,
@@ -150,7 +115,7 @@ fn spawn_rubik_cube(
         .id();
 
     let cubie_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let face_mesh = meshes.add(Cuboid::new(0.85, 0.85, 0.02)); // Beveled look by making face smaller
+    let face_mesh = meshes.add(Cuboid::new(0.85, 0.85, 0.02));
 
     for x in -1..=1 {
         for y in -1..=1 {
@@ -178,7 +143,6 @@ fn spawn_rubik_cube(
                         Face::Right,
                         &face_mesh,
                         &materials.red,
-                        grid_coord == IVec3::X,
                     );
                 } else if x == -1 {
                     spawn_face(
@@ -187,7 +151,6 @@ fn spawn_rubik_cube(
                         Face::Left,
                         &face_mesh,
                         &materials.orange,
-                        grid_coord == IVec3::NEG_X,
                     );
                 }
                 if y == 1 {
@@ -197,7 +160,6 @@ fn spawn_rubik_cube(
                         Face::Up,
                         &face_mesh,
                         &materials.white,
-                        grid_coord == IVec3::Y,
                     );
                 } else if y == -1 {
                     spawn_face(
@@ -206,7 +168,6 @@ fn spawn_rubik_cube(
                         Face::Down,
                         &face_mesh,
                         &materials.yellow,
-                        grid_coord == IVec3::NEG_Y,
                     );
                 }
                 if z == 1 {
@@ -216,7 +177,6 @@ fn spawn_rubik_cube(
                         Face::Front,
                         &face_mesh,
                         &materials.green,
-                        grid_coord == IVec3::Z,
                     );
                 } else if z == -1 {
                     spawn_face(
@@ -225,7 +185,6 @@ fn spawn_rubik_cube(
                         Face::Back,
                         &face_mesh,
                         &materials.blue,
-                        grid_coord == IVec3::NEG_Z,
                     );
                 }
             }
@@ -239,10 +198,9 @@ fn spawn_face(
     face: Face,
     mesh: &Handle<Mesh>,
     material: &Handle<StandardMaterial>,
-    is_center: bool,
 ) {
     let normal = face.normal();
-    let translation = normal * 0.501; // Slightly outside the cubie
+    let translation = normal * 0.501;
     let rotation = Quat::from_rotation_arc(Vec3::Z, normal);
     let face_id = commands
         .spawn((
@@ -251,16 +209,11 @@ fn spawn_face(
             Transform::from_translation(translation).with_rotation(rotation),
             CubieFace(face),
         ))
-        .with_children(|_parent| {
-            if is_center {
-                // Removed face labels as they were not rendering correctly
-            }
-        })
         .id();
     commands.entity(parent).add_child(face_id);
 }
 
-fn handle_rotation_queue(
+pub fn handle_rotation_queue(
     mut commands: Commands,
     mut queue: ResMut<RotationQueue>,
     current: Option<Res<CurrentlyRotating>>,
@@ -308,12 +261,15 @@ fn handle_rotation_queue(
     }
 }
 
-fn animate_rotation(
+pub type CubieQuery<'w, 's> =
+    Query<'w, 's, (&'static mut Transform, &'static mut GridCoord), (With<Cubie>, Without<Pivot>)>;
+
+pub fn animate_rotation(
     mut commands: Commands,
     time: Res<Time>,
     current: Option<ResMut<CurrentlyRotating>>,
     pivot_query: Single<(Entity, &mut Transform, &TargetRotation), With<Pivot>>,
-    mut cubie_query: Query<CubieQueryData, CubieQueryFilter>,
+    mut cubie_query: CubieQuery,
     cube_root: Single<Entity, With<RubikCube>>,
     mut history: ResMut<MoveHistory>,
 ) {
@@ -324,27 +280,18 @@ fn animate_rotation(
     current.timer.tick(time.delta());
     let progress = current.timer.fraction();
 
-    // Ease Out Quad
     let eased_progress = (1.0 - progress).mul_add(-(1.0 - progress), 1.0);
     pivot_transform.rotation = Quat::IDENTITY.slerp(target.0, eased_progress);
 
     if current.timer.is_finished() {
-        // Complete rotation
         for &cubie_entity in &current.cubies {
             if let Ok((mut transform, mut coord)) = cubie_query.get_mut(cubie_entity) {
-                // Logic update
                 coord.rotate(current.rotation_axis, current.angle);
-
-                // SNAP: Reset transform relative to RubikCube
-                // Position must be exactly GAP * GridCoord
                 transform.translation = coord.0.as_vec3() * GAP;
 
-                // Rotation must be exactly a multiple of 90 degrees
-                // We apply the rotation step to the PREVIOUS rotation
                 let rot_step = Quat::from_axis_angle(current.rotation_axis, current.angle);
                 transform.rotation = (rot_step * transform.rotation).normalize();
 
-                // Re-attach to root
                 commands.entity(cubie_entity).insert(ChildOf(root_entity));
             }
         }

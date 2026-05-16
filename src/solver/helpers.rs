@@ -1,17 +1,10 @@
-use crate::components::{CubieFace, Direction, Face, RotationAxis, RotationMove};
+use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove};
 use bevy::prelude::*;
-use kewb::DataTable;
-
-#[derive(Resource)]
-pub struct SolverResource {
-    pub table: DataTable,
-}
 
 pub fn get_cube_state(faces: &Query<(&CubieFace, &GlobalTransform)>) -> String {
     let mut state = vec![' '; 54];
 
     // Face configurations: (Face normal, Right vector, Down vector)
-    // Kewb uses U, R, F, D, L, B order
     let face_configs = [
         (Face::Up, Vec3::X, Vec3::Z),            // U (+Y)
         (Face::Right, Vec3::NEG_Z, Vec3::NEG_Y), // R (+X)
@@ -50,7 +43,7 @@ fn find_facelet_color_at(
 ) -> Option<Face> {
     for (cubie_face, transform) in faces.iter() {
         let face_pos = transform.translation();
-        let face_normal = transform.back(); // Our spawn_face sets +Z as normal
+        let face_normal = transform.back();
 
         if face_pos.distance(pos) < 0.2 && face_normal.dot(normal) > 0.8 {
             return Some(cubie_face.0);
@@ -70,7 +63,6 @@ const fn face_to_char(face: Face) -> char {
     }
 }
 
-/// Convert the solver's string solution to `RotationMove` sequence
 pub fn solution_to_moves(solution: &str) -> Vec<RotationMove> {
     let mut all_moves = Vec::new();
     for part in solution.split_whitespace() {

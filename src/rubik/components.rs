@@ -8,11 +8,16 @@ pub struct RubikCube;
 #[derive(Component)]
 pub struct Cubie;
 
+/// Marker for the pivot used during rotation
+#[derive(Component)]
+pub struct Pivot;
+
 /// Logical coordinates of a cubie in the 3x3x3 grid (-1 to 1)
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridCoord(pub IVec3);
 
 impl GridCoord {
+    /// Update the logical coordinate based on a 90-degree rotation
     pub fn rotate(&mut self, axis: Vec3, angle: f32) {
         let rotation = Quat::from_axis_angle(axis, angle);
         let rotated = rotation * self.0.as_vec3();
@@ -23,36 +28,6 @@ impl GridCoord {
 /// Target rotation for animation
 #[derive(Component)]
 pub struct TargetRotation(pub Quat);
-
-/// Resource to hold materials for the Rubik's cube
-#[derive(Resource)]
-pub struct RubikMaterials {
-    pub white: Handle<StandardMaterial>,
-    pub yellow: Handle<StandardMaterial>,
-    pub red: Handle<StandardMaterial>,
-    pub orange: Handle<StandardMaterial>,
-    pub green: Handle<StandardMaterial>,
-    pub blue: Handle<StandardMaterial>,
-    pub black: Handle<StandardMaterial>,
-    // Skin textures
-    pub carbon_tex: Handle<Image>,
-    pub geometric_tex: Handle<Image>,
-    pub floral_tex: Handle<Image>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SkinType {
-    #[default]
-    Classic,
-    Carbon,
-    Geometric,
-    Floral,
-}
-
-#[derive(Resource, Default)]
-pub struct RubikSkin {
-    pub current: SkinType,
-}
 
 /// Enum representing the 6 faces of a cube
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +40,20 @@ pub enum Face {
     Back,  // -Z (Blue)
 }
 
+impl Face {
+    /// Get the normal vector for the face
+    pub const fn normal(self) -> Vec3 {
+        match self {
+            Self::Up => Vec3::Y,
+            Self::Down => Vec3::NEG_Y,
+            Self::Right => Vec3::X,
+            Self::Left => Vec3::NEG_X,
+            Self::Front => Vec3::Z,
+            Self::Back => Vec3::NEG_Z,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RotationAxis {
     X,
@@ -73,6 +62,7 @@ pub enum RotationAxis {
 }
 
 impl RotationAxis {
+    /// Get the unit vector for the rotation axis
     pub const fn vector(self) -> Vec3 {
         match self {
             Self::X => Vec3::X,
@@ -89,6 +79,7 @@ pub enum Direction {
 }
 
 impl Direction {
+    /// Get the inverse of the direction
     pub const fn inverse(self) -> Self {
         match self {
             Self::Clockwise => Self::CounterClockwise,
@@ -105,28 +96,8 @@ pub struct RotationMove {
     pub add_to_history: bool,
 }
 
-#[derive(Resource, Default)]
-pub struct RotationQueue(pub std::collections::VecDeque<RotationMove>);
-
-#[derive(Resource, Default)]
-pub struct MoveHistory {
-    pub done: Vec<RotationMove>,
-    pub undone: Vec<RotationMove>,
-}
-
-#[derive(Resource)]
-pub struct CurrentlyRotating {
-    pub axis: RotationAxis,
-    pub index: i32,
-    pub direction: Direction,
-    pub timer: Timer,
-    pub rotation_axis: Vec3, // Actual vector for Quat
-    pub angle: f32,
-    pub cubies: Vec<Entity>,
-    pub add_to_history: bool,
-}
-
 impl RotationMove {
+    /// Get the inverse move
     pub const fn inverse(self) -> Self {
         Self {
             axis: self.axis,
@@ -136,6 +107,7 @@ impl RotationMove {
         }
     }
 
+    /// Get the rotation vector and angle for this move
     pub fn get_rotation_info(self) -> (Vec3, f32) {
         let axis_vec = self.axis.vector();
         let angle = match self.direction {
@@ -145,6 +117,7 @@ impl RotationMove {
         (axis_vec, angle)
     }
 
+    /// Check if a cubie at the given coordinate is part of the rotating slice
     pub const fn is_cubie_at_slice(self, coord: IVec3) -> bool {
         match self.axis {
             RotationAxis::X => coord.x == self.index,
@@ -154,47 +127,6 @@ impl RotationMove {
     }
 }
 
-impl Face {
-    pub const fn normal(self) -> Vec3 {
-        match self {
-            Self::Up => Vec3::Y,
-            Self::Down => Vec3::NEG_Y,
-            Self::Right => Vec3::X,
-            Self::Left => Vec3::NEG_X,
-            Self::Front => Vec3::Z,
-            Self::Back => Vec3::NEG_Z,
-        }
-    }
-}
-
-/// Component attached to each colored face of a cubie.
-/// Holds the initial face orientation which defines its color.
+/// Component attached to each colored face of a cubie
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CubieFace(pub Face);
-
-/// Resource to track mouse drag for rotation
-#[derive(Resource, Default)]
-pub struct DragState {
-    pub start_face: Option<(Entity, Vec3, Vec3)>,
-}
-
-/// Component for the orbiting camera
-#[derive(Component)]
-pub struct OrbitCamera {
-    pub radius: f32,
-    pub alpha: f32, // Horizontal angle (yaw)
-    pub beta: f32,  // Vertical angle (pitch)
-}
-
-#[derive(Message)]
-pub struct ResetCameraEvent;
-
-#[derive(Message)]
-pub struct SolveByStepsEvent;
-
-#[derive(Resource, Default)]
-pub struct StepByStepSolution {
-    pub moves: Vec<String>,
-    pub current_step: usize,
-    pub active: bool,
-}
