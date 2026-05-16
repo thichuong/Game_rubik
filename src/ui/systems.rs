@@ -1,3 +1,4 @@
+use crate::environment::resources::EnvironmentSettings;
 use crate::events::ResetCameraEvent;
 use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
 use crate::rubik::resources::{RotationQueue, RubikSkin, SkinType};
@@ -33,6 +34,20 @@ pub struct SkinToggleButton;
 
 #[derive(Component)]
 pub struct SkinList;
+
+#[derive(Component)]
+pub struct EnvToggleButton;
+
+#[derive(Component)]
+pub struct EnvList;
+
+#[derive(Component)]
+pub enum EnvControl {
+    Intensity(f32), // Increment/Decrement value
+    Temp(Color),    // Presets for temperature
+    Angle(f32),     // Increment/Decrement in radians
+    Bg(Color),      // Preset backgrounds
+}
 
 pub type InteractionQuery<'w, 's, T> = Query<
     'w,
@@ -209,6 +224,238 @@ pub fn setup_ui(mut commands: Commands) {
                                 ));
                             });
                     }
+                });
+        });
+
+    // TOP LEFT Environment Panel
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(40.0),
+                left: Val::Px(40.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexStart,
+                row_gap: Val::Px(10.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|parent| {
+            // Toggle Button
+            parent
+                .spawn(Button)
+                .insert(Node {
+                    width: Val::Px(180.0),
+                    height: Val::Px(50.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(Val::Px(10.0)),
+                    ..default()
+                })
+                .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                    0.25, 0.15, 0.15, 0.9,
+                ))))
+                .insert(EnvToggleButton)
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("ENVIRONMENT ▾"),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::WHITE)),
+                    ));
+                });
+
+            // Env List
+            parent
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(15.0),
+                        display: Display::None,
+                        padding: UiRect::all(Val::Px(15.0)),
+                        border_radius: BorderRadius::all(Val::Px(12.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.1, 0.9))),
+                    EnvList,
+                ))
+                .with_children(|parent| {
+                    // INTENSITY
+                    parent.spawn((
+                        Text::new("Intensity"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
+                    ));
+                    parent
+                        .spawn(Node {
+                            column_gap: Val::Px(10.0),
+                            ..default()
+                        })
+                        .with_children(|p| {
+                            for (label, val) in [("-", -500_000.0), ("+", 500_000.0)] {
+                                p.spawn(Button)
+                                    .insert(Node {
+                                        width: Val::Px(40.0),
+                                        height: Val::Px(30.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border_radius: BorderRadius::all(Val::Px(5.0)),
+                                        ..default()
+                                    })
+                                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                                        0.2, 0.2, 0.25, 1.0,
+                                    ))))
+                                    .insert(EnvControl::Intensity(val))
+                                    .with_children(|btn| {
+                                        btn.spawn((
+                                            Text::new(label),
+                                            TextFont {
+                                                font_size: 18.0,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                            }
+                        });
+
+                    // TEMPERATURE (Presets)
+                    parent.spawn((
+                        Text::new("Color Temperature"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
+                    ));
+                    parent
+                        .spawn(Node {
+                            column_gap: Val::Px(8.0),
+                            flex_wrap: FlexWrap::Wrap,
+                            ..default()
+                        })
+                        .with_children(|p| {
+                            let temps = [
+                                (Color::Srgba(Srgba::new(1.0, 0.8, 0.6, 1.0)), "Warm"),
+                                (Color::Srgba(Srgba::WHITE), "Neutral"),
+                                (Color::Srgba(Srgba::new(0.7, 0.8, 1.0, 1.0)), "Cool"),
+                            ];
+                            for (color, label) in temps {
+                                p.spawn(Button)
+                                    .insert(Node {
+                                        padding: UiRect::horizontal(Val::Px(8.0)),
+                                        height: Val::Px(25.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border_radius: BorderRadius::all(Val::Px(5.0)),
+                                        ..default()
+                                    })
+                                    .insert(BackgroundColor(color.with_alpha(0.6)))
+                                    .insert(EnvControl::Temp(color))
+                                    .with_children(|btn| {
+                                        btn.spawn((
+                                            Text::new(label),
+                                            TextFont {
+                                                font_size: 12.0,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                            }
+                        });
+
+                    // LIGHT ANGLE
+                    parent.spawn((
+                        Text::new("Light Angle"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
+                    ));
+                    parent
+                        .spawn(Node {
+                            column_gap: Val::Px(10.0),
+                            ..default()
+                        })
+                        .with_children(|p| {
+                            for (label, val) in [("↺", -0.5), ("↻", 0.5)] {
+                                p.spawn(Button)
+                                    .insert(Node {
+                                        width: Val::Px(40.0),
+                                        height: Val::Px(30.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border_radius: BorderRadius::all(Val::Px(5.0)),
+                                        ..default()
+                                    })
+                                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                                        0.2, 0.2, 0.25, 1.0,
+                                    ))))
+                                    .insert(EnvControl::Angle(val))
+                                    .with_children(|btn| {
+                                        btn.spawn((
+                                            Text::new(label),
+                                            TextFont {
+                                                font_size: 18.0,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                            }
+                        });
+
+                    // BACKGROUND
+                    parent.spawn((
+                        Text::new("Surroundings"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
+                    ));
+                    parent
+                        .spawn(Node {
+                            column_gap: Val::Px(8.0),
+                            flex_wrap: FlexWrap::Wrap,
+                            row_gap: Val::Px(5.0),
+                            ..default()
+                        })
+                        .with_children(|p| {
+                            let bgs = [
+                                (Color::Srgba(Srgba::new(0.05, 0.05, 0.07, 1.0)), "Dark"),
+                                (Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 1.0)), "Studio"),
+                                (Color::Srgba(Srgba::new(0.1, 0.2, 0.15, 1.0)), "Forest"),
+                                (Color::Srgba(Srgba::new(0.3, 0.2, 0.2, 1.0)), "Sunset"),
+                            ];
+                            for (color, label) in bgs {
+                                p.spawn(Button)
+                                    .insert(Node {
+                                        padding: UiRect::horizontal(Val::Px(8.0)),
+                                        height: Val::Px(25.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border_radius: BorderRadius::all(Val::Px(5.0)),
+                                        ..default()
+                                    })
+                                    .insert(BackgroundColor(color))
+                                    .insert(EnvControl::Bg(color))
+                                    .with_children(|btn| {
+                                        btn.spawn((
+                                            Text::new(label),
+                                            TextFont {
+                                                font_size: 12.0,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                            }
+                        });
                 });
         });
 
@@ -568,6 +815,75 @@ pub fn handle_skin_toggle(
             Interaction::None => {
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.15, 0.25, 0.9)));
             }
+        }
+    }
+}
+
+pub type EnvToggleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor),
+    (Changed<Interaction>, With<EnvToggleButton>),
+>;
+
+pub fn handle_env_toggle(
+    mut interaction_query: EnvToggleQuery,
+    mut env_list: Single<&mut Node, With<EnvList>>,
+    mut state: Local<bool>,
+) {
+    for (interaction, mut bg_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *state = !*state;
+                env_list.display = if *state { Display::Flex } else { Display::None };
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.5, 0.3, 0.3, 1.0)));
+            }
+            Interaction::Hovered => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.25, 0.25, 0.95)));
+            }
+            Interaction::None => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.15, 0.15, 0.9)));
+            }
+        }
+    }
+}
+
+pub type EnvControlQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Interaction,
+        &'static EnvControl,
+        &'static mut BackgroundColor,
+    ),
+    (Changed<Interaction>, With<Button>),
+>;
+
+pub fn handle_env_controls(
+    mut interaction_query: EnvControlQuery,
+    mut settings: ResMut<EnvironmentSettings>,
+) {
+    for (interaction, control, mut bg_color) in &mut interaction_query {
+        if matches!(*interaction, Interaction::Pressed) {
+            match control {
+                EnvControl::Intensity(delta) => {
+                    settings.light_intensity =
+                        (settings.light_intensity + delta).clamp(0.0, 10_000_000.0);
+                }
+                EnvControl::Temp(color) => {
+                    settings.color_temperature = *color;
+                }
+                EnvControl::Angle(delta) => {
+                    settings.light_angle += delta;
+                }
+                EnvControl::Bg(color) => {
+                    settings.background_color = *color;
+                }
+            }
+            *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.5, 1.0)));
+        } else if matches!(*interaction, Interaction::Hovered) {
+            // Subtle hover effect if not pressed
+            // *bg_color = ...
         }
     }
 }

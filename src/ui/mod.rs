@@ -16,6 +16,8 @@ impl Plugin for UiPlugin {
                 systems::update_solution_panel,
                 systems::handle_skin_button,
                 systems::handle_skin_toggle,
+                systems::handle_env_toggle,
+                systems::handle_env_controls,
             ),
         );
     }

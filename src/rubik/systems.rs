@@ -20,42 +20,42 @@ pub fn setup_materials(
     let geometric_tex = asset_server.load("textures/geometric.png");
     let floral_tex = asset_server.load("textures/floral.png");
 
-    // Premium materials with HSL-inspired vibrant colors
+    // Premium materials with a soft matte look to avoid glare
     let rubik_materials = RubikMaterials {
         white: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::WHITE),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         yellow: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::new(1.0, 0.9, 0.0, 1.0)),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         red: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::new(0.9, 0.1, 0.1, 1.0)),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         orange: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::new(1.0, 0.4, 0.0, 1.0)),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         green: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::new(0.1, 0.7, 0.1, 1.0)),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         blue: materials.add(StandardMaterial {
             base_color: Color::Srgba(Srgba::new(0.1, 0.2, 0.9, 1.0)),
-            perceptual_roughness: 0.1,
-            metallic: 0.1,
+            perceptual_roughness: 0.8,
+            metallic: 0.0,
             ..default()
         }),
         black: materials.add(StandardMaterial {
