@@ -34,6 +34,24 @@ pub struct RubikMaterials {
     pub green: Handle<StandardMaterial>,
     pub blue: Handle<StandardMaterial>,
     pub black: Handle<StandardMaterial>,
+    // Skin textures
+    pub carbon_tex: Handle<Image>,
+    pub geometric_tex: Handle<Image>,
+    pub floral_tex: Handle<Image>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SkinType {
+    #[default]
+    Classic,
+    Carbon,
+    Geometric,
+    Floral,
+}
+
+#[derive(Resource, Default)]
+pub struct RubikSkin {
+    pub current: SkinType,
 }
 
 /// Enum representing the 6 faces of a cube

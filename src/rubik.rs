@@ -1,6 +1,6 @@
 use crate::components::{
     Cubie, CubieFace, CurrentlyRotating, Face, GridCoord, MoveHistory, RotationMove, RotationQueue,
-    RubikCube, RubikMaterials, TargetRotation,
+    RubikCube, RubikMaterials, RubikSkin, SkinType, TargetRotation,
 };
 use bevy::prelude::*;
 
@@ -18,10 +18,16 @@ impl Plugin for RubikPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RotationQueue>()
             .init_resource::<MoveHistory>()
+            .init_resource::<RubikSkin>()
             .add_systems(Startup, (setup_materials, spawn_rubik_cube).chain())
             .add_systems(
                 Update,
-                (handle_rotation_queue, animate_rotation, handle_camera_reset),
+                (
+                    handle_rotation_queue,
+                    animate_rotation,
+                    handle_camera_reset,
+                    update_skins,
+                ),
             );
     }
 }
@@ -36,7 +42,16 @@ fn handle_camera_reset(
     }
 }
 
-fn setup_materials(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn setup_materials(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
+) {
+    // Load skin textures
+    let carbon_tex = asset_server.load("textures/carbon.png");
+    let geometric_tex = asset_server.load("textures/geometric.png");
+    let floral_tex = asset_server.load("textures/floral.png");
+
     // Premium materials with HSL-inspired vibrant colors
     let rubik_materials = RubikMaterials {
         white: materials.add(StandardMaterial {
@@ -80,8 +95,44 @@ fn setup_materials(mut commands: Commands, mut materials: ResMut<Assets<Standard
             perceptual_roughness: 0.3,
             ..default()
         }),
+        carbon_tex,
+        geometric_tex,
+        floral_tex,
     };
     commands.insert_resource(rubik_materials);
+}
+
+fn update_skins(
+    skin: Res<RubikSkin>,
+    rubik_materials: Res<RubikMaterials>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !skin.is_changed() {
+        return;
+    }
+
+    let texture = match skin.current {
+        SkinType::Classic => None,
+        SkinType::Carbon => Some(rubik_materials.carbon_tex.clone()),
+        SkinType::Geometric => Some(rubik_materials.geometric_tex.clone()),
+        SkinType::Floral => Some(rubik_materials.floral_tex.clone()),
+    };
+
+    // Update all face materials
+    let face_materials = [
+        &rubik_materials.white,
+        &rubik_materials.yellow,
+        &rubik_materials.red,
+        &rubik_materials.orange,
+        &rubik_materials.green,
+        &rubik_materials.blue,
+    ];
+
+    for handle in face_materials {
+        if let Some(mat) = materials.get_mut(handle) {
+            mat.base_color_texture.clone_from(&texture);
+        }
+    }
 }
 
 fn spawn_rubik_cube(

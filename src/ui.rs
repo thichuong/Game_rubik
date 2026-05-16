@@ -1,4 +1,6 @@
-use crate::components::{CubieFace, Direction, RotationAxis, RotationMove, RotationQueue};
+use crate::components::{
+    CubieFace, Direction, RotationAxis, RotationMove, RotationQueue, RubikSkin, SkinType,
+};
 use crate::solver;
 use bevy::prelude::*;
 use rand::RngExt;
@@ -16,6 +18,7 @@ impl Plugin for UiPlugin {
                 handle_next_step_button,
                 handle_close_button,
                 update_solution_panel,
+                handle_skin_button,
             ),
         );
     }
@@ -38,6 +41,9 @@ struct StepText;
 
 #[derive(Component)]
 struct CloseButton;
+
+#[derive(Component)]
+struct SkinButton(SkinType);
 
 /// Set up the UI with a premium look
 #[allow(clippy::too_many_lines)]
@@ -114,6 +120,67 @@ fn setup_ui(mut commands: Commands) {
                         },
                         TextColor(Color::Srgba(Srgba::WHITE)),
                     ));
+                });
+
+            // SKINS Panel (Above the buttons)
+            parent
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.0),
+                    margin: UiRect::bottom(Val::Px(10.0)),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("SKINS"),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.8, 0.8, 0.9, 1.0))),
+                    ));
+
+                    parent
+                        .spawn(Node {
+                            flex_direction: FlexDirection::Row,
+                            column_gap: Val::Px(10.0),
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            let skins = [
+                                (SkinType::Classic, "Classic"),
+                                (SkinType::Carbon, "Carbon"),
+                                (SkinType::Geometric, "Geo"),
+                                (SkinType::Floral, "Floral"),
+                            ];
+
+                            for (skin_type, label) in skins {
+                                parent
+                                    .spawn(Button)
+                                    .insert(Node {
+                                        width: Val::Px(80.0),
+                                        height: Val::Px(40.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                                        ..default()
+                                    })
+                                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                                        0.2, 0.2, 0.25, 0.8,
+                                    ))))
+                                    .insert(SkinButton(skin_type))
+                                    .with_children(|parent| {
+                                        parent.spawn((
+                                            Text::new(label),
+                                            TextFont {
+                                                font_size: 14.0,
+                                                ..default()
+                                            },
+                                            TextColor(Color::Srgba(Srgba::WHITE)),
+                                        ));
+                                    });
+                            }
+                        });
                 });
         });
 
@@ -428,6 +495,34 @@ fn handle_close_button(
     for interaction in &mut interaction_query {
         if matches!(*interaction, Interaction::Pressed) {
             solution.active = false;
+        }
+    }
+}
+
+/// Handle skin button interaction
+fn handle_skin_button(
+    mut interaction_query: Query<
+        (&Interaction, &SkinButton, &mut BackgroundColor),
+        Changed<Interaction>,
+    >,
+    mut rubik_skin: ResMut<RubikSkin>,
+) {
+    for (interaction, skin_btn, mut bg_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                rubik_skin.current = skin_btn.0;
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.8, 1.0)));
+            }
+            Interaction::Hovered => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.3, 0.4, 0.9)));
+            }
+            Interaction::None => {
+                if rubik_skin.current == skin_btn.0 {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.3, 0.3, 0.6, 1.0)));
+                } else {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.8)));
+                }
+            }
         }
     }
 }
