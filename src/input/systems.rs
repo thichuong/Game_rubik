@@ -114,12 +114,15 @@ pub fn handle_mouse_input(
                         }
                     };
 
-                    rotation_queue.0.push_back(RotationMove {
-                        axis: best_axis,
-                        index,
-                        direction,
-                        add_to_history: true,
-                    });
+                    // Block center layer rotations (index 0) from mouse interaction
+                    if index != 0 {
+                        rotation_queue.0.push_back(RotationMove {
+                            axis: best_axis,
+                            index,
+                            direction,
+                            add_to_history: true,
+                        });
+                    }
                 }
             }
         }

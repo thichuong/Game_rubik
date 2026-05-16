@@ -227,7 +227,12 @@ pub fn handle_rotation_queue(
     }
     let root_entity = *cube_root;
 
-    if let Some(rotation_move) = queue.0.pop_front() {
+    while let Some(rotation_move) = queue.0.pop_front() {
+        // Enforce blocking of center slice rotations (index 0) in core logic
+        if rotation_move.index == 0 {
+            continue;
+        }
+
         let (axis_vec, angle) = rotation_move.get_rotation_info();
 
         let pivot_id = commands
@@ -260,6 +265,7 @@ pub fn handle_rotation_queue(
             cubies: rotating_cubies,
             add_to_history: rotation_move.add_to_history,
         });
+        return;
     }
 }
 
