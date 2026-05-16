@@ -7,6 +7,7 @@ mod solver;
 mod ui;
 
 use bevy::prelude::*;
+use bevy_resvg::prelude::*;
 use camera::components::OrbitCamera;
 use camera::CameraPlugin;
 use environment::EnvironmentPlugin;
@@ -34,6 +35,7 @@ fn main() {
         .add_plugins(InputPlugin)
         .add_plugins(SolverPlugin)
         .add_plugins(UiPlugin)
+        .add_plugins(SvgPlugin)
         .add_systems(Startup, setup_scene)
         .run();
 }

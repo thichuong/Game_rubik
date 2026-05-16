@@ -5,7 +5,9 @@ use crate::rubik::resources::{RotationQueue, RubikSkin, SkinType};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
 use bevy::prelude::*;
+use bevy_resvg::prelude::*;
 use rand::RngExt;
+
 use std::fmt::Write;
 
 #[derive(Component)]
@@ -62,7 +64,12 @@ pub type InteractionQuery<'w, 's, T> = Query<
 
 /// Set up the UI with a premium look
 #[allow(clippy::too_many_lines)]
-pub fn setup_ui(mut commands: Commands) {
+pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let font = asset_server.load("fonts/font.ttf");
+    let dropdown_icon = asset_server.load("textures/icons/dropdown_arrow.svg");
+    let rotate_left_icon = asset_server.load("textures/icons/rotate_left.svg");
+    let rotate_right_icon = asset_server.load("textures/icons/rotate_right.svg");
+
     commands
         .spawn((
             Node {
@@ -101,6 +108,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("SOLVE"),
                         TextFont {
                             font_size: 24.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::WHITE)),
@@ -131,6 +139,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("SHUFFLE"),
                         TextFont {
                             font_size: 24.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::WHITE)),
@@ -169,14 +178,32 @@ pub fn setup_ui(mut commands: Commands) {
                 ))))
                 .insert(SkinToggleButton)
                 .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("SKINS ▾"),
-                        TextFont {
-                            font_size: 20.0,
+                    parent
+                        .spawn(Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(8.0),
                             ..default()
-                        },
-                        TextColor(Color::Srgba(Srgba::WHITE)),
-                    ));
+                        })
+                        .with_children(|p| {
+                            p.spawn((
+                                Text::new("SKINS"),
+                                TextFont {
+                                    font_size: 20.0,
+                                    font: font.clone(),
+                                    ..default()
+                                },
+                                TextColor(Color::Srgba(Srgba::WHITE)),
+                            ));
+                            p.spawn((
+                                UiSvg(dropdown_icon.clone()),
+                                Node {
+                                    width: Val::Px(12.0),
+                                    height: Val::Px(12.0),
+                                    ..default()
+                                },
+                            ));
+                        });
                 });
 
             // Skin List
@@ -218,6 +245,7 @@ pub fn setup_ui(mut commands: Commands) {
                                     Text::new(label),
                                     TextFont {
                                         font_size: 16.0,
+                                        font: font.clone(),
                                         ..default()
                                     },
                                     TextColor(Color::Srgba(Srgba::WHITE)),
@@ -258,14 +286,32 @@ pub fn setup_ui(mut commands: Commands) {
                 ))))
                 .insert(EnvToggleButton)
                 .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("ENVIRONMENT ▾"),
-                        TextFont {
-                            font_size: 18.0,
+                    parent
+                        .spawn(Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(8.0),
                             ..default()
-                        },
-                        TextColor(Color::Srgba(Srgba::WHITE)),
-                    ));
+                        })
+                        .with_children(|p| {
+                            p.spawn((
+                                Text::new("ENVIRONMENT"),
+                                TextFont {
+                                    font_size: 18.0,
+                                    font: font.clone(),
+                                    ..default()
+                                },
+                                TextColor(Color::Srgba(Srgba::WHITE)),
+                            ));
+                            p.spawn((
+                                UiSvg(dropdown_icon.clone()),
+                                Node {
+                                    width: Val::Px(10.0),
+                                    height: Val::Px(10.0),
+                                    ..default()
+                                },
+                            ));
+                        });
                 });
 
             // Env List
@@ -288,6 +334,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("Intensity"),
                         TextFont {
                             font_size: 14.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
@@ -317,6 +364,7 @@ pub fn setup_ui(mut commands: Commands) {
                                             Text::new(label),
                                             TextFont {
                                                 font_size: 18.0,
+                                                font: font.clone(),
                                                 ..default()
                                             },
                                         ));
@@ -329,6 +377,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("Color Temperature"),
                         TextFont {
                             font_size: 14.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
@@ -362,6 +411,7 @@ pub fn setup_ui(mut commands: Commands) {
                                             Text::new(label),
                                             TextFont {
                                                 font_size: 12.0,
+                                                font: font.clone(),
                                                 ..default()
                                             },
                                         ));
@@ -374,6 +424,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("Light Angle"),
                         TextFont {
                             font_size: 14.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
@@ -384,7 +435,11 @@ pub fn setup_ui(mut commands: Commands) {
                             ..default()
                         })
                         .with_children(|p| {
-                            for (label, val) in [("↺", -0.5), ("↻", 0.5)] {
+                            let angle_controls = [
+                                (rotate_left_icon.clone(), -0.5),
+                                (rotate_right_icon.clone(), 0.5),
+                            ];
+                            for (icon, val) in angle_controls {
                                 p.spawn(Button)
                                     .insert(Node {
                                         width: Val::Px(40.0),
@@ -400,9 +455,10 @@ pub fn setup_ui(mut commands: Commands) {
                                     .insert(EnvControl::Angle(val))
                                     .with_children(|btn| {
                                         btn.spawn((
-                                            Text::new(label),
-                                            TextFont {
-                                                font_size: 18.0,
+                                            UiSvg(icon),
+                                            Node {
+                                                width: Val::Px(18.0),
+                                                height: Val::Px(18.0),
                                                 ..default()
                                             },
                                         ));
@@ -415,6 +471,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("Surroundings"),
                         TextFont {
                             font_size: 14.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
@@ -450,6 +507,7 @@ pub fn setup_ui(mut commands: Commands) {
                                             Text::new(label),
                                             TextFont {
                                                 font_size: 12.0,
+                                                font: font.clone(),
                                                 ..default()
                                             },
                                         ));
@@ -497,6 +555,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("X"),
                         TextFont {
                             font_size: 16.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::WHITE)),
@@ -508,6 +567,7 @@ pub fn setup_ui(mut commands: Commands) {
                 Text::new("SOLUTION STEPS"),
                 TextFont {
                     font_size: 20.0,
+                    font: font.clone(),
                     ..default()
                 },
                 TextColor(Color::Srgba(Srgba::WHITE)),
@@ -517,6 +577,7 @@ pub fn setup_ui(mut commands: Commands) {
                 Text::new("No solution yet"),
                 TextFont {
                     font_size: 18.0,
+                    font: font.clone(),
                     ..default()
                 },
                 TextColor(Color::Srgba(Srgba::new(0.7, 0.7, 0.7, 1.0))),
@@ -546,6 +607,7 @@ pub fn setup_ui(mut commands: Commands) {
                         Text::new("NEXT STEP"),
                         TextFont {
                             font_size: 18.0,
+                            font: font.clone(),
                             ..default()
                         },
                         TextColor(Color::Srgba(Srgba::WHITE)),
@@ -574,6 +636,7 @@ pub fn setup_ui(mut commands: Commands) {
                             Text::new(format!("{abbr}: {desc}")),
                             TextFont {
                                 font_size: 13.0,
+                                font: font.clone(),
                                 ..default()
                             },
                             TextColor(Color::Srgba(Srgba::new(0.6, 0.6, 0.7, 1.0))),

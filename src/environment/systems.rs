@@ -77,7 +77,10 @@ pub fn update_environment(
     mut clear_color: ResMut<ClearColor>,
     mut light_query: Query<&mut PointLight>,
     mut rig_query: Single<&mut Transform, With<LightRig>>,
-    floor_material: Single<&MeshMaterial3d<StandardMaterial>, With<crate::environment::resources::Floor>>,
+    floor_material: Single<
+        &MeshMaterial3d<StandardMaterial>,
+        With<crate::environment::resources::Floor>,
+    >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if settings.is_changed() {
