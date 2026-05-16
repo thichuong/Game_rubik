@@ -19,7 +19,20 @@ impl Plugin for RubikPlugin {
         app.init_resource::<RotationQueue>()
             .init_resource::<MoveHistory>()
             .add_systems(Startup, (setup_materials, spawn_rubik_cube).chain())
-            .add_systems(Update, (handle_rotation_queue, animate_rotation));
+            .add_systems(
+                Update,
+                (handle_rotation_queue, animate_rotation, handle_camera_reset),
+            );
+    }
+}
+
+fn handle_camera_reset(
+    mut events: MessageReader<crate::components::ResetCameraEvent>,
+    mut orbit: Single<&mut crate::components::OrbitCamera>,
+) {
+    for _ in events.read() {
+        orbit.alpha = 0.785;
+        orbit.beta = 0.785;
     }
 }
 
@@ -114,6 +127,7 @@ fn spawn_rubik_cube(
                         Face::Right,
                         &face_mesh,
                         &materials.red,
+                        grid_coord == IVec3::X,
                     );
                 } else if x == -1 {
                     spawn_face(
@@ -122,6 +136,7 @@ fn spawn_rubik_cube(
                         Face::Left,
                         &face_mesh,
                         &materials.orange,
+                        grid_coord == IVec3::NEG_X,
                     );
                 }
                 if y == 1 {
@@ -131,6 +146,7 @@ fn spawn_rubik_cube(
                         Face::Up,
                         &face_mesh,
                         &materials.white,
+                        grid_coord == IVec3::Y,
                     );
                 } else if y == -1 {
                     spawn_face(
@@ -139,6 +155,7 @@ fn spawn_rubik_cube(
                         Face::Down,
                         &face_mesh,
                         &materials.yellow,
+                        grid_coord == IVec3::NEG_Y,
                     );
                 }
                 if z == 1 {
@@ -148,6 +165,7 @@ fn spawn_rubik_cube(
                         Face::Front,
                         &face_mesh,
                         &materials.green,
+                        grid_coord == IVec3::Z,
                     );
                 } else if z == -1 {
                     spawn_face(
@@ -156,6 +174,7 @@ fn spawn_rubik_cube(
                         Face::Back,
                         &face_mesh,
                         &materials.blue,
+                        grid_coord == IVec3::NEG_Z,
                     );
                 }
             }
@@ -169,6 +188,7 @@ fn spawn_face(
     face: Face,
     mesh: &Handle<Mesh>,
     material: &Handle<StandardMaterial>,
+    is_center: bool,
 ) {
     let normal = face.normal();
     let translation = normal * 0.501; // Slightly outside the cubie
@@ -180,6 +200,11 @@ fn spawn_face(
             Transform::from_translation(translation).with_rotation(rotation),
             CubieFace(face),
         ))
+        .with_children(|_parent| {
+            if is_center {
+                // Removed face labels as they were not rendering correctly
+            }
+        })
         .id();
     commands.entity(parent).add_child(face_id);
 }

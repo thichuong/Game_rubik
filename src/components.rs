@@ -167,3 +167,16 @@ pub struct OrbitCamera {
     pub alpha: f32, // Horizontal angle (yaw)
     pub beta: f32,  // Vertical angle (pitch)
 }
+
+#[derive(Message)]
+pub struct ResetCameraEvent;
+
+#[derive(Message)]
+pub struct SolveByStepsEvent;
+
+#[derive(Resource, Default)]
+pub struct StepByStepSolution {
+    pub moves: Vec<String>,
+    pub current_step: usize,
+    pub active: bool,
+}

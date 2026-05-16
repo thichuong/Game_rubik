@@ -24,6 +24,9 @@ fn main() {
         .insert_resource(solver::SolverResource {
             table: kewb::DataTable::default(),
         })
+        .init_resource::<components::StepByStepSolution>()
+        .add_message::<components::ResetCameraEvent>()
+        .add_message::<components::SolveByStepsEvent>()
         .add_plugins(RubikPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(UiPlugin)
