@@ -1,5 +1,5 @@
 use crate::events::ResetCameraEvent;
-use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove};
+use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
 use crate::rubik::resources::{RotationQueue, RubikSkin, SkinType};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
@@ -385,6 +385,7 @@ pub fn handle_solve_button(
     mut solution: ResMut<StepByStepSolution>,
     mut reset_camera: MessageWriter<ResetCameraEvent>,
     faces: Query<(&CubieFace, &GlobalTransform)>,
+    cube_query: Single<&GlobalTransform, With<RubikCube>>,
     solver_res: Res<SolverResource>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
@@ -399,7 +400,7 @@ pub fn handle_solve_button(
                 solution.moves.clear();
                 solution.current_step = 0;
 
-                let state_str = helpers::get_cube_state(&faces);
+                let state_str = helpers::get_cube_state(&faces, &cube_query);
 
                 match kewb::FaceCube::try_from(state_str.as_str()) {
                     Ok(face_cube) => match kewb::CubieCube::try_from(&face_cube) {

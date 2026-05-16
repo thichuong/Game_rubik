@@ -1,5 +1,5 @@
 use crate::input::resources::DragState;
-use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove};
+use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
 use crate::rubik::resources::{MoveHistory, RotationQueue};
 use bevy::prelude::*;
 // Removed PickingInteraction import
@@ -9,6 +9,7 @@ pub fn handle_mouse_input(
     mut drag_state: ResMut<DragState>,
     mut rotation_queue: ResMut<RotationQueue>,
     picks: Query<(Entity, &CubieFace, &GlobalTransform, &Interaction)>,
+    cube_query: Single<&GlobalTransform, With<RubikCube>>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
         for (entity, _cubie_face, transform, interaction) in picks.iter() {
@@ -36,8 +37,12 @@ pub fn handle_mouse_input(
                         let mut best_axis = RotationAxis::X;
                         let mut max_dot = 0.0;
 
+                        let cube_transform = *cube_query;
                         for axis in [RotationAxis::X, RotationAxis::Y, RotationAxis::Z] {
-                            let dot = rotation_axis_vec.dot(axis.vector()).abs();
+                            // Transform local axis to world space based on cube's rotation
+                            let local_axis_in_world =
+                                cube_transform.affine().transform_vector3(axis.vector());
+                            let dot = rotation_axis_vec.dot(local_axis_in_world).abs();
                             if dot > max_dot {
                                 max_dot = dot;
                                 best_axis = axis;
@@ -54,10 +59,16 @@ pub fn handle_mouse_input(
                         };
 
                         #[allow(clippy::cast_possible_truncation)]
-                        let index = match best_axis {
-                            RotationAxis::X => start_pos.x.round() as i32,
-                            RotationAxis::Y => start_pos.y.round() as i32,
-                            RotationAxis::Z => start_pos.z.round() as i32,
+                        let index = {
+                            let local_start_pos = cube_transform
+                                .affine()
+                                .inverse()
+                                .transform_point3(start_pos);
+                            match best_axis {
+                                RotationAxis::X => local_start_pos.x.round() as i32,
+                                RotationAxis::Y => local_start_pos.y.round() as i32,
+                                RotationAxis::Z => local_start_pos.z.round() as i32,
+                            }
                         };
 
                         rotation_queue.0.push_back(RotationMove {

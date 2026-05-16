@@ -1,7 +1,10 @@
 use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove};
 use bevy::prelude::*;
 
-pub fn get_cube_state(faces: &Query<(&CubieFace, &GlobalTransform)>) -> String {
+pub fn get_cube_state(
+    faces: &Query<(&CubieFace, &GlobalTransform)>,
+    cube_transform: &GlobalTransform,
+) -> String {
     let mut state = vec![' '; 54];
 
     // Face configurations: (Face normal, Right vector, Down vector)
@@ -24,7 +27,9 @@ pub fn get_cube_state(faces: &Query<(&CubieFace, &GlobalTransform)>) -> String {
                 let j = row as f32 - 1.0;
                 let target_pos = normal * 1.5 + right_vec * i + down_vec * j;
 
-                if let Some(color) = find_facelet_color_at(target_pos, normal, faces) {
+                if let Some(color) =
+                    find_facelet_color_at(target_pos, normal, faces, cube_transform)
+                {
                     state[face_idx * 9 + row * 3 + col] = face_to_char(color);
                 } else {
                     error!("Missing facelet at {:?} for face {:?}", target_pos, face);
@@ -40,12 +45,17 @@ fn find_facelet_color_at(
     pos: Vec3,
     normal: Vec3,
     faces: &Query<(&CubieFace, &GlobalTransform)>,
+    cube_transform: &GlobalTransform,
 ) -> Option<Face> {
+    let cube_inverse = cube_transform.affine().inverse();
     for (cubie_face, transform) in faces.iter() {
-        let face_pos = transform.translation();
-        let face_normal = transform.back();
+        let face_pos_world = transform.translation();
+        let face_pos_local = cube_inverse.transform_point3(face_pos_world);
 
-        if face_pos.distance(pos) < 0.2 && face_normal.dot(normal) > 0.8 {
+        let face_normal_world = transform.back();
+        let face_normal_local = cube_inverse.transform_vector3(*face_normal_world);
+
+        if face_pos_local.distance(pos) < 0.2 && face_normal_local.dot(normal) > 0.8 {
             return Some(cubie_face.0);
         }
     }

@@ -1,20 +1,12 @@
 use crate::camera::components::OrbitCamera;
 use crate::events::ResetCameraEvent;
-use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 
 /// System to handle camera orbiting via mouse input
-pub fn update_camera_orbit(
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
-    orbit_query: Single<(&mut Transform, &mut OrbitCamera)>,
-) {
+pub fn update_camera_orbit(orbit_query: Single<(&mut Transform, &mut OrbitCamera)>) {
     let (mut transform, mut orbit) = orbit_query.into_inner();
 
-    if mouse_button.pressed(MouseButton::Right) {
-        orbit.alpha -= accumulated_mouse_motion.delta.x * 0.005;
-        orbit.beta += accumulated_mouse_motion.delta.y * 0.005;
-    }
+    // Removed Right Mouse Button handling here - moved to RubikCube rotation
 
     orbit.beta = orbit.beta.clamp(-1.4, 1.4); // Limit pitch
 

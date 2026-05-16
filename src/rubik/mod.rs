@@ -21,6 +21,8 @@ impl Plugin for RubikPlugin {
                 (
                     systems::handle_rotation_queue,
                     systems::animate_rotation,
+                    systems::update_rubik_rotation,
+                    systems::handle_cube_reset,
                     systems::update_skins,
                 ),
             );
