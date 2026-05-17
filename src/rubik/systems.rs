@@ -209,132 +209,168 @@ struct VoxelBar {
     size: Vec3,
 }
 
+/// Helper to create 3D voxel coordinates for letter U
+fn get_voxel_u(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Right vertical
+        VoxelBar {
+            offset: Vec3::new(0.0, -0.075, 0.0),
+            size: Vec3::new(0.21, t, t),
+        }, // Bottom horizontal
+    ]
+}
+
+/// Helper to create 3D voxel coordinates for letter D
+fn get_voxel_d(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(-0.01, 0.075, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Top horizontal
+        VoxelBar {
+            offset: Vec3::new(-0.01, -0.075, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Bottom horizontal
+        VoxelBar {
+            offset: Vec3::new(0.06, 0.0, 0.0),
+            size: Vec3::new(t, 0.15, t),
+        }, // Right vertical
+    ]
+}
+
+/// Helper to create 3D voxel coordinates for letter L
+fn get_voxel_l(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(0.0, -0.075, 0.0),
+            size: Vec3::new(0.21, t, t),
+        }, // Bottom horizontal
+    ]
+}
+
+/// Helper to create 3D voxel coordinates for letter R
+fn get_voxel_r(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(-0.01, 0.075, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Top horizontal
+        VoxelBar {
+            offset: Vec3::new(-0.01, 0.0, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Middle horizontal
+        VoxelBar {
+            offset: Vec3::new(0.06, 0.038, 0.0),
+            size: Vec3::new(t, 0.075, t),
+        }, // Right vertical top
+        VoxelBar {
+            offset: Vec3::new(0.06, -0.038, 0.0),
+            size: Vec3::new(t, 0.075, t),
+        }, // Right vertical bottom
+    ]
+}
+
+/// Helper to create 3D voxel coordinates for letter F
+fn get_voxel_f(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(0.0, 0.075, 0.0),
+            size: Vec3::new(0.21, t, t),
+        }, // Top horizontal
+        VoxelBar {
+            offset: Vec3::new(-0.015, 0.0, 0.0),
+            size: Vec3::new(0.13, t, t),
+        }, // Middle horizontal
+    ]
+}
+
+/// Helper to create 3D voxel coordinates for letter B
+fn get_voxel_b(t: f32) -> Vec<VoxelBar> {
+    vec![
+        VoxelBar {
+            offset: Vec3::new(-0.08, 0.0, 0.0),
+            size: Vec3::new(t, 0.20, t),
+        }, // Left vertical
+        VoxelBar {
+            offset: Vec3::new(-0.01, 0.075, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Top horizontal
+        VoxelBar {
+            offset: Vec3::new(-0.01, 0.0, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Middle horizontal
+        VoxelBar {
+            offset: Vec3::new(-0.01, -0.075, 0.0),
+            size: Vec3::new(0.14, t, t),
+        }, // Bottom horizontal
+        VoxelBar {
+            offset: Vec3::new(0.06, 0.038, 0.0),
+            size: Vec3::new(t, 0.075, t),
+        }, // Right vertical top
+        VoxelBar {
+            offset: Vec3::new(0.06, -0.038, 0.0),
+            size: Vec3::new(t, 0.075, t),
+        }, // Right vertical bottom
+    ]
+}
+
 /// Define the 3D cuboid layout for each face label letter
-#[allow(clippy::too_many_lines)]
 fn get_voxel_bars(label: &str) -> Vec<VoxelBar> {
-    let t = 0.035; // Thickness of the bars
+    let t = 0.05; // Increased thickness of the bars to make the letters look bolder and more robust
     match label {
-        "U" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Right vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, -0.08, 0.0),
-                size: Vec3::new(0.18, t, t),
-            }, // Bottom horizontal
-        ],
-        "D" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.08, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Top horizontal
-            VoxelBar {
-                offset: Vec3::new(0.0, -0.08, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Bottom horizontal
-            VoxelBar {
-                offset: Vec3::new(0.065, 0.0, 0.0),
-                size: Vec3::new(t, 0.13, t),
-            }, // Right vertical
-        ],
-        "L" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, -0.08, 0.0),
-                size: Vec3::new(0.18, t, t),
-            }, // Bottom horizontal
-        ],
-        "R" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.08, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Top horizontal
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.0, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Middle horizontal
-            VoxelBar {
-                offset: Vec3::new(0.065, 0.04, 0.0),
-                size: Vec3::new(t, 0.08, t),
-            }, // Right vertical top
-            VoxelBar {
-                offset: Vec3::new(0.065, -0.04, 0.0),
-                size: Vec3::new(t, 0.08, t),
-            }, // Right vertical bottom
-        ],
-        "F" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.08, 0.0),
-                size: Vec3::new(0.18, t, t),
-            }, // Top horizontal
-            VoxelBar {
-                offset: Vec3::new(-0.01, 0.0, 0.0),
-                size: Vec3::new(0.12, t, t),
-            }, // Middle horizontal
-        ],
-        "B" => vec![
-            VoxelBar {
-                offset: Vec3::new(-0.08, 0.0, 0.0),
-                size: Vec3::new(t, 0.20, t),
-            }, // Left vertical
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.08, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Top horizontal
-            VoxelBar {
-                offset: Vec3::new(0.0, 0.0, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Middle horizontal
-            VoxelBar {
-                offset: Vec3::new(0.0, -0.08, 0.0),
-                size: Vec3::new(0.13, t, t),
-            }, // Bottom horizontal
-            VoxelBar {
-                offset: Vec3::new(0.065, 0.04, 0.0),
-                size: Vec3::new(t, 0.08, t),
-            }, // Right vertical top
-            VoxelBar {
-                offset: Vec3::new(0.065, -0.04, 0.0),
-                size: Vec3::new(t, 0.08, t),
-            }, // Right vertical bottom
-        ],
+        "U" => get_voxel_u(t),
+        "D" => get_voxel_d(t),
+        "L" => get_voxel_l(t),
+        "R" => get_voxel_r(t),
+        "F" => get_voxel_f(t),
+        "B" => get_voxel_b(t),
         _ => vec![],
     }
 }
 
-/// Spawn white lines and 3D voxel-style letter models for each face of the Rubik's cube
+/// Helper to map a Face direction to its corresponding color representation
+const fn get_face_color(face: Face) -> Srgba {
+    match face {
+        Face::Up => Srgba::WHITE,
+        Face::Down => Srgba::new(1.0, 0.9, 0.0, 1.0),
+        Face::Left => Srgba::new(1.0, 0.4, 0.0, 1.0),
+        Face::Right => Srgba::new(0.9, 0.1, 0.1, 1.0),
+        Face::Front => Srgba::new(0.1, 0.7, 0.1, 1.0),
+        Face::Back => Srgba::new(0.1, 0.4, 0.9, 1.0),
+    }
+}
+
+/// Spawn colored lines and 3D voxel-style letter models for each face of the Rubik's cube
 fn spawn_face_axes(
     commands: &mut Commands,
     cube_root: Entity,
     meshes: &mut ResMut<Assets<Mesh>>,
     standard_materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    let line_mesh = meshes.add(Cuboid::new(0.015, 0.015, 1.2));
-    let white_unlit = standard_materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        unlit: true,
-        ..default()
-    });
+    let line_mesh = meshes.add(Cuboid::new(0.012, 0.012, 1.2)); // Slightly thinner line for a more elegant look
 
     let faces_info = [
         (Face::Up, "U"),
@@ -352,6 +388,24 @@ fn spawn_face_axes(
 
     for (face, label) in faces_info {
         let normal = face.normal();
+        let face_color = get_face_color(face);
+
+        // Create a faded, semi-transparent material for the axis lines (hologram laser effect)
+        let mut line_color = face_color;
+        line_color.alpha = 0.25; // 25% opacity for elegant blend
+        let line_material = standard_materials.add(StandardMaterial {
+            base_color: Color::Srgba(line_color),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+
+        // Create a solid unlit material for the voxel letter
+        let letter_material = standard_materials.add(StandardMaterial {
+            base_color: Color::Srgba(face_color),
+            unlit: true,
+            ..default()
+        });
 
         // Calculate the line transform
         let line_translation = normal * line_center_dist;
@@ -360,7 +414,7 @@ fn spawn_face_axes(
         let line_id = commands
             .spawn((
                 Mesh3d(line_mesh.clone()),
-                MeshMaterial3d(white_unlit.clone()),
+                MeshMaterial3d(line_material),
                 Transform::from_translation(line_translation).with_rotation(line_rotation),
             ))
             .id();
@@ -390,7 +444,7 @@ fn spawn_face_axes(
             let bar_id = commands
                 .spawn((
                     Mesh3d(bar_mesh),
-                    MeshMaterial3d(white_unlit.clone()),
+                    MeshMaterial3d(letter_material.clone()),
                     Transform::from_translation(bar.offset),
                 ))
                 .id();
@@ -400,12 +454,19 @@ fn spawn_face_axes(
     }
 }
 
+/// Type alias for the face label update query to avoid type complexity warning
+type FaceLabelQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Transform, &'static FaceLabel3d),
+    (Without<RubikCube>, Without<Camera>),
+>;
+
 /// System to update 3D face labels so that they move with the Rubik's cube but remain screen-aligned (billboarded)
-#[allow(clippy::type_complexity)]
 pub fn update_face_labels(
-    cube_query: Single<&Transform, (With<RubikCube>, Without<FaceLabel3d>, Without<Camera>)>,
-    camera_query: Single<&Transform, (With<Camera>, Without<RubikCube>, Without<FaceLabel3d>)>,
-    mut label_query: Query<(&mut Transform, &FaceLabel3d), (Without<RubikCube>, Without<Camera>)>,
+    cube_query: Single<&Transform, With<RubikCube>>,
+    camera_query: Single<&Transform, With<Camera>>,
+    mut label_query: FaceLabelQuery,
 ) {
     let cube_transform = *cube_query;
     let camera_transform = *camera_query;
