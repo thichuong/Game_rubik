@@ -13,7 +13,14 @@ graph TD
     %% Module Plugins
     subgraph UI ["🎨 UI Module"]
         UiPlugin["UiPlugin"]
-        Buttons["Shuffle / Solve / Steps / Settings Controls"]
+        Components["components.rs <br>(Marker Components)"]
+        Interactions["interactions.rs <br>(Interactions & Input Sync)"]
+        subgraph Layout ["layout/ (Modular Layout)"]
+            LayoutMod["layout.rs <br>(setup_ui Orchestrator)"]
+            Sidebar["sidebar.rs <br>(Left Sidebar Layout)"]
+            Env["environment.rs <br>(3D Environment Controls)"]
+            HUD["hud.rs <br>(Bottom Steps HUD)"]
+        end
     end
 
     subgraph Input ["🖱️ Input Module"]
@@ -131,10 +138,17 @@ Creates a high-end visual experience.
 *   **Reflection Plane & Shadows**: Renders a floor mesh configured to receive crisp soft shadows cast by the cube.
 
 ### 5. UI Module (`src/ui`)
-Xử lý all widgets including modular control buttons, skins selection, and dynamic configurations.
-*   Built entirely in Bevy native UI nodes.
-*   Resolves rendering quality through vector icons utilizing SVG to PNG rasterization with the `bevy_resvg` framework.
-*   Integrates interactive state triggers for background colors, lighting parameters, and active step-by-step indexes.
+Manages the graphical interface, widgets, customize sidebar, and step-by-step guidance HUD. Refactored from a monolithic codebase into a highly modular, decoupled structure satisfying strict **Clippy clean standards** (0 warnings, without using any `#[allow(clippy::too_many_lines)]` bypasses).
+*   **Modular Architecture**:
+    *   [mod.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/mod.rs): Registers `UiPlugin` and sets up the resource flows.
+    *   [components.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/components.rs): Houses all ECS Marker Components (e.g. `CloseButton`, `ShuffleButton`, `EnvControl`) used to query and identify UI elements.
+    *   [interactions.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/interactions.rs): Contains systems that respond to user interactions (Hover, Click) by mutating internal resources (e.g., trigger solve pipeline, update background clear colors, or toggle skin materials).
+    *   [layout.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout.rs): The main setup entrypoint containing the `setup_ui` orchestrator which loads assets and builds the outer UI frame.
+    *   [layout/sidebar.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout/sidebar.rs): Spawns the modular Left Sidebar (including logo headers, basic button layouts, and collapsible skin options).
+    *   [layout/environment.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout/environment.rs): Spawns detailed panels for real-time 3D lighting, temperature presets, angle controls, and scene backdrops.
+    *   [layout/hud.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout/hud.rs): Spawns the bottom-anchored step-by-step guidance dashboard.
+*   **Vector Rendering Excellence**: Uses the `bevy_resvg` framework to seamlessly render crystal-clear `.svg` vector icons into pixel-perfect Bevy UI meshes at runtime.
+*   **Zero-Warning Clean Code**: Highly optimized visual spawning functions are aggressively divided into dedicated sub-functions (~30 to 60 lines each) to guarantee maximum code readability and strict Clippy pedantic compliance.
 
 ---
 
