@@ -15,7 +15,17 @@ pub fn handle_mouse_input(
     cubie_faces: Query<(Entity, &CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     rubik_size: Res<RubikSize>,
+    ui_interactions: Query<&Interaction>,
 ) {
+    // Block 3D mouse interaction if the cursor is over any active UI element
+    if ui_interactions
+        .iter()
+        .any(|&interaction| interaction != Interaction::None)
+    {
+        drag_state.start_face = None;
+        return;
+    }
+
     let window = *window_query;
     let (camera, camera_transform) = *camera_query;
 

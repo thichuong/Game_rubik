@@ -32,28 +32,30 @@ fn spawn_hud_header(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
                 TextColor(Color::Srgba(Srgba::new(0.4, 0.8, 0.5, 1.0))),
             ));
 
-            p.spawn(Button)
-                .insert(Node {
+            p.spawn((
+                Button,
+                Node {
                     width: Val::Px(24.0),
                     height: Val::Px(24.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border_radius: BorderRadius::all(Val::Px(6.0)),
                     ..default()
-                })
-                .insert(BackgroundColor(Color::NONE))
-                .insert(CloseButton)
-                .with_children(|btn: &mut ChildSpawnerCommands| {
-                    btn.spawn((
-                        Text::new("X"),
-                        TextFont {
-                            font_size: 14.0,
-                            font: font.clone(),
-                            ..default()
-                        },
-                        TextColor(Color::Srgba(Srgba::new(0.6, 0.6, 0.6, 1.0))),
-                    ));
-                });
+                },
+                BackgroundColor(Color::NONE),
+                CloseButton,
+            ))
+            .with_children(|btn: &mut ChildSpawnerCommands| {
+                btn.spawn((
+                    Text::new("X"),
+                    TextFont {
+                        font_size: 14.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::new(0.6, 0.6, 0.6, 1.0))),
+                ));
+            });
         });
 }
 
@@ -100,8 +102,9 @@ fn spawn_hud_details_row(parent: &mut ChildSpawnerCommands, font: &Handle<Font>)
             });
 
             // Right Column: Action Button
-            p.spawn(Button)
-                .insert(Node {
+            p.spawn((
+                Button,
+                Node {
                     width: Val::Px(140.0),
                     height: Val::Px(42.0),
                     border: UiRect::all(Val::Px(1.5)),
@@ -109,24 +112,21 @@ fn spawn_hud_details_row(parent: &mut ChildSpawnerCommands, font: &Handle<Font>)
                     align_items: AlignItems::Center,
                     border_radius: BorderRadius::all(Val::Px(10.0)),
                     ..default()
-                })
-                .insert(BorderColor::all(Color::Srgba(Srgba::new(
-                    0.2, 0.5, 0.3, 0.6,
-                ))))
-                .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                    0.1, 0.22, 0.15, 0.9,
-                ))))
-                .insert(NextStepButton)
-                .with_children(|btn: &mut ChildSpawnerCommands| {
-                    btn.spawn((
-                        Text::new("NEXT STEP"),
-                        TextFont {
-                            font_size: 14.0,
-                            font: font.clone(),
-                            ..default()
-                        },
-                        TextColor(Color::Srgba(Srgba::WHITE)),
-                    ));
-                });
+                },
+                BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6))),
+                BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.9))),
+                NextStepButton,
+            ))
+            .with_children(|btn: &mut ChildSpawnerCommands| {
+                btn.spawn((
+                    Text::new("NEXT STEP"),
+                    TextFont {
+                        font_size: 14.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::WHITE)),
+                ));
+            });
         });
 }

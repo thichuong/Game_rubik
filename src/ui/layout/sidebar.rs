@@ -81,8 +81,9 @@ pub fn spawn_controls(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
             })
             .with_children(|row: &mut ChildSpawnerCommands| {
                 // SHUFFLE Button
-                row.spawn(Button)
-                    .insert(Node {
+                row.spawn((
+                    Button,
+                    Node {
                         flex_grow: 1.0,
                         height: Val::Px(45.0),
                         border: UiRect::all(Val::Px(1.5)),
@@ -90,29 +91,27 @@ pub fn spawn_controls(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
                         align_items: AlignItems::Center,
                         border_radius: BorderRadius::all(Val::Px(12.0)),
                         ..default()
-                    })
-                    .insert(BorderColor::all(Color::Srgba(Srgba::new(
-                        0.25, 0.3, 0.5, 0.6,
-                    ))))
-                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                        0.12, 0.15, 0.25, 0.85,
-                    ))))
-                    .insert(ShuffleButton)
-                    .with_children(|btn: &mut ChildSpawnerCommands| {
-                        btn.spawn((
-                            Text::new("SHUFFLE"),
-                            TextFont {
-                                font_size: 15.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(Color::Srgba(Srgba::WHITE)),
-                        ));
-                    });
+                    },
+                    BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.3, 0.5, 0.6))),
+                    BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.15, 0.25, 0.85))),
+                    ShuffleButton,
+                ))
+                .with_children(|btn: &mut ChildSpawnerCommands| {
+                    btn.spawn((
+                        Text::new("SHUFFLE"),
+                        TextFont {
+                            font_size: 15.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::WHITE)),
+                    ));
+                });
 
                 // SOLVE Button
-                row.spawn(Button)
-                    .insert(Node {
+                row.spawn((
+                    Button,
+                    Node {
                         flex_grow: 1.0,
                         height: Val::Px(45.0),
                         border: UiRect::all(Val::Px(1.5)),
@@ -120,26 +119,23 @@ pub fn spawn_controls(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
                         align_items: AlignItems::Center,
                         border_radius: BorderRadius::all(Val::Px(12.0)),
                         ..default()
-                    })
-                    .insert(BorderColor::all(Color::Srgba(Srgba::new(
-                        0.2, 0.5, 0.3, 0.6,
-                    ))))
-                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                        0.1, 0.22, 0.15, 0.85,
-                    ))))
-                    .insert(SolveButton)
-                    .with_children(|btn: &mut ChildSpawnerCommands| {
-                        btn.spawn((
-                            Text::new("SOLVE"),
-                            TextFont {
-                                font_size: 15.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(Color::Srgba(Srgba::WHITE)),
-                            SolveButtonText,
-                        ));
-                    });
+                    },
+                    BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6))),
+                    BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.85))),
+                    SolveButton,
+                ))
+                .with_children(|btn: &mut ChildSpawnerCommands| {
+                    btn.spawn((
+                        Text::new("SOLVE"),
+                        TextFont {
+                            font_size: 15.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::WHITE)),
+                        SolveButtonText,
+                    ));
+                });
             });
         });
 }
@@ -158,8 +154,9 @@ pub fn spawn_skins_section(
         })
         .with_children(|p: &mut ChildSpawnerCommands| {
             // Toggle Header Button
-            p.spawn(Button)
-                .insert(Node {
+            p.spawn((
+                Button,
+                Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(42.0),
                     justify_content: JustifyContent::SpaceBetween,
@@ -168,33 +165,30 @@ pub fn spawn_skins_section(
                     border: UiRect::all(Val::Px(1.0)),
                     border_radius: BorderRadius::all(Val::Px(10.0)),
                     ..default()
-                })
-                .insert(BorderColor::all(Color::Srgba(Srgba::new(
-                    0.25, 0.25, 0.3, 0.4,
-                ))))
-                .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                    0.12, 0.12, 0.15, 0.6,
-                ))))
-                .insert(SkinToggleButton)
-                .with_children(|btn: &mut ChildSpawnerCommands| {
-                    btn.spawn((
-                        Text::new("CUBE SKINS"),
-                        TextFont {
-                            font_size: 14.0,
-                            font: font.clone(),
-                            ..default()
-                        },
-                        TextColor(Color::Srgba(Srgba::WHITE)),
-                    ));
-                    btn.spawn((
-                        UiSvg(dropdown_icon.clone()),
-                        Node {
-                            width: Val::Px(10.0),
-                            height: Val::Px(10.0),
-                            ..default()
-                        },
-                    ));
-                });
+                },
+                BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.25, 0.3, 0.4))),
+                BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.12, 0.15, 0.6))),
+                SkinToggleButton,
+            ))
+            .with_children(|btn: &mut ChildSpawnerCommands| {
+                btn.spawn((
+                    Text::new("CUBE SKINS"),
+                    TextFont {
+                        font_size: 14.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::WHITE)),
+                ));
+                btn.spawn((
+                    UiSvg(dropdown_icon.clone()),
+                    Node {
+                        width: Val::Px(10.0),
+                        height: Val::Px(10.0),
+                        ..default()
+                    },
+                ));
+            });
 
             // Skin List Grid
             p.spawn((
@@ -218,8 +212,9 @@ pub fn spawn_skins_section(
                 ];
 
                 for (skin_type, label) in skins {
-                    grid.spawn(Button)
-                        .insert(Node {
+                    grid.spawn((
+                        Button,
+                        Node {
                             width: Val::Px(136.0),
                             height: Val::Px(38.0),
                             justify_content: JustifyContent::Center,
@@ -227,25 +222,22 @@ pub fn spawn_skins_section(
                             border: UiRect::all(Val::Px(1.0)),
                             border_radius: BorderRadius::all(Val::Px(8.0)),
                             ..default()
-                        })
-                        .insert(BorderColor::all(Color::Srgba(Srgba::new(
-                            0.2, 0.2, 0.25, 0.4,
-                        ))))
-                        .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                            0.1, 0.1, 0.12, 0.7,
-                        ))))
-                        .insert(SkinButton(skin_type))
-                        .with_children(|btn: &mut ChildSpawnerCommands| {
-                            btn.spawn((
-                                Text::new(label),
-                                TextFont {
-                                    font_size: 13.0,
-                                    font: font.clone(),
-                                    ..default()
-                                },
-                                TextColor(Color::Srgba(Srgba::WHITE)),
-                            ));
-                        });
+                        },
+                        BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.4))),
+                        BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.7))),
+                        SkinButton(skin_type),
+                    ))
+                    .with_children(|btn: &mut ChildSpawnerCommands| {
+                        btn.spawn((
+                            Text::new(label),
+                            TextFont {
+                                font_size: 13.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::Srgba(Srgba::WHITE)),
+                        ));
+                    });
                 }
             });
         });
@@ -301,105 +293,105 @@ pub fn spawn_size_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>
             })
             .with_children(|row: &mut ChildSpawnerCommands| {
                 // Decrement button
-                row.spawn(Button)
-                    .insert(Node {
+                row.spawn((
+                    Button,
+                    Node {
                         width: Val::Px(32.0),
                         height: Val::Px(32.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border_radius: BorderRadius::all(Val::Px(8.0)),
                         ..default()
-                    })
-                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                        0.12, 0.12, 0.18, 0.8,
-                    ))))
-                    .insert(SizeDecrementButton)
-                    .with_children(|btn: &mut ChildSpawnerCommands| {
-                        btn.spawn((
-                            Text::new("-"),
-                            TextFont {
-                                font_size: 18.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(Color::Srgba(Srgba::WHITE)),
-                        ));
-                    });
+                    },
+                    BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.12, 0.18, 0.8))),
+                    SizeDecrementButton,
+                ))
+                .with_children(|btn: &mut ChildSpawnerCommands| {
+                    btn.spawn((
+                        Text::new("-"),
+                        TextFont {
+                            font_size: 18.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::WHITE)),
+                    ));
+                });
 
                 // Slider Track
-                row.spawn(Button) // Using Button to capture Interaction events easily
-                    .insert(Node {
+                row.spawn((
+                    Button, // Using Button to capture Interaction events easily
+                    Node {
                         flex_grow: 1.0,
                         height: Val::Px(8.0),
                         border_radius: BorderRadius::all(Val::Px(4.0)),
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         ..default()
-                    })
-                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                        0.08, 0.08, 0.12, 1.0,
-                    ))))
-                    .insert(SizeSliderTrack)
-                    .with_children(|track: &mut ChildSpawnerCommands| {
-                        // Slider Fill (visual indicator of progress)
-                        track.spawn((
-                            Node {
-                                width: Val::Percent(10.0), // Updated by system based on size (3/12 => ~10%)
-                                height: Val::Percent(100.0),
-                                border_radius: BorderRadius::new(
-                                    Val::Px(4.0),
-                                    Val::Px(0.0),
-                                    Val::Px(0.0),
-                                    Val::Px(4.0),
-                                ),
-                                ..default()
-                            },
-                            BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.5, 0.9, 0.85))),
-                            SizeSliderFill,
-                        ));
+                    },
+                    BackgroundColor(Color::Srgba(Srgba::new(0.08, 0.08, 0.12, 1.0))),
+                    SizeSliderTrack,
+                ))
+                .with_children(|track: &mut ChildSpawnerCommands| {
+                    // Slider Fill (visual indicator of progress)
+                    track.spawn((
+                        Node {
+                            width: Val::Percent(10.0), // Updated by system based on size (3/12 => ~10%)
+                            height: Val::Percent(100.0),
+                            border_radius: BorderRadius::new(
+                                Val::Px(4.0),
+                                Val::Px(0.0),
+                                Val::Px(0.0),
+                                Val::Px(4.0),
+                            ),
+                            ..default()
+                        },
+                        BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.5, 0.9, 0.85))),
+                        SizeSliderFill,
+                    ));
 
-                        // Slider Handle (thumb indicator)
-                        track.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                left: Val::Percent(10.0), // Updated by system
-                                width: Val::Px(16.0),
-                                height: Val::Px(16.0),
-                                border_radius: BorderRadius::all(Val::Px(8.0)),
-                                margin: UiRect::left(Val::Px(-8.0)), // Offset to center thumb
-                                ..default()
-                            },
-                            BackgroundColor(Color::Srgba(Srgba::WHITE)),
-                            BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.45, 0.85, 1.0))),
-                            SizeSliderHandle,
-                        ));
-                    });
+                    // Slider Handle (thumb indicator)
+                    track.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Percent(10.0), // Updated by system
+                            width: Val::Px(16.0),
+                            height: Val::Px(16.0),
+                            border_radius: BorderRadius::all(Val::Px(8.0)),
+                            margin: UiRect::left(Val::Px(-8.0)), // Offset to center thumb
+                            ..default()
+                        },
+                        BackgroundColor(Color::Srgba(Srgba::WHITE)),
+                        BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.45, 0.85, 1.0))),
+                        SizeSliderHandle,
+                    ));
+                });
 
                 // Increment button
-                row.spawn(Button)
-                    .insert(Node {
+                row.spawn((
+                    Button,
+                    Node {
                         width: Val::Px(32.0),
                         height: Val::Px(32.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border_radius: BorderRadius::all(Val::Px(8.0)),
                         ..default()
-                    })
-                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
-                        0.12, 0.12, 0.18, 0.8,
-                    ))))
-                    .insert(SizeIncrementButton)
-                    .with_children(|btn: &mut ChildSpawnerCommands| {
-                        btn.spawn((
-                            Text::new("+"),
-                            TextFont {
-                                font_size: 18.0,
-                                font: font.clone(),
-                                ..default()
-                            },
-                            TextColor(Color::Srgba(Srgba::WHITE)),
-                        ));
-                    });
+                    },
+                    BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.12, 0.18, 0.8))),
+                    SizeIncrementButton,
+                ))
+                .with_children(|btn: &mut ChildSpawnerCommands| {
+                    btn.spawn((
+                        Text::new("+"),
+                        TextFont {
+                            font_size: 18.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::WHITE)),
+                    ));
+                });
             });
         });
 }
