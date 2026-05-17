@@ -24,7 +24,7 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     let rotate_left_icon = asset_server.load("textures/icons/rotate_left.svg");
     let rotate_right_icon = asset_server.load("textures/icons/rotate_right.svg");
 
-    // Unified Left Sidebar
+    // Unified Left Sidebar Container
     commands
         .spawn((
             Node {
@@ -34,73 +34,87 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 bottom: Val::Px(20.0),
                 width: Val::Px(320.0),
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::horizontal(Val::Px(20.0)),
                 border_radius: BorderRadius::all(Val::Px(24.0)),
-                overflow: Overflow::scroll_y(),
                 ..default()
             },
             BackgroundColor(Color::Srgba(Srgba::new(0.06, 0.06, 0.09, 0.85))),
             BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.25, 0.35, 0.4))),
             Interaction::default(),
-            ScrollPosition::default(),
-            SidebarScrollable,
         ))
         .with_children(|parent: &mut ChildSpawnerCommands| {
-            // Scroll Content Wrapper to prevent Flexbox from shrinking items
+            // Scrollable viewport
             parent
                 .spawn((
                     Node {
                         width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(15.0),
-                        padding: UiRect::vertical(Val::Px(20.0)),
-                        flex_shrink: 0.0,
+                        padding: UiRect::horizontal(Val::Px(20.0)),
+                        overflow: Overflow::scroll_y(),
+                        border_radius: BorderRadius::all(Val::Px(24.0)),
                         ..default()
                     },
-                    ScrollContentWrapper,
+                    Interaction::default(),
+                    ScrollPosition::default(),
+                    SidebarScrollable,
                 ))
-                .with_children(|scroll_content: &mut ChildSpawnerCommands| {
-                    // Header
-                    spawn_header(scroll_content, &font);
+                .with_children(|scroll_viewport| {
+                    // Scroll Content Wrapper to prevent Flexbox from shrinking items
+                    scroll_viewport
+                        .spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Column,
+                                row_gap: Val::Px(15.0),
+                                padding: UiRect::vertical(Val::Px(20.0)),
+                                flex_shrink: 0.0,
+                                ..default()
+                            },
+                            ScrollContentWrapper,
+                        ))
+                        .with_children(|scroll_content: &mut ChildSpawnerCommands| {
+                            // Header
+                            spawn_header(scroll_content, &font);
 
-                    // Divider
-                    spawn_divider(scroll_content);
+                            // Divider
+                            spawn_divider(scroll_content);
 
-                    // Cube Size Section
-                    spawn_size_section(scroll_content, &font);
+                            // Cube Size Section
+                            spawn_size_section(scroll_content, &font);
 
-                    // Divider
-                    spawn_divider(scroll_content);
+                            // Divider
+                            spawn_divider(scroll_content);
 
-                    // Controls (Actions)
-                    spawn_controls(scroll_content, &font);
+                            // Controls (Actions)
+                            spawn_controls(scroll_content, &font);
 
-                    // Divider
-                    spawn_divider(scroll_content);
+                            // Divider
+                            spawn_divider(scroll_content);
 
-                    // Cube Skins Accordion
-                    spawn_skins_section(scroll_content, &font, &dropdown_icon);
+                            // Cube Skins Accordion
+                            spawn_skins_section(scroll_content, &font, &dropdown_icon);
 
-                    // Divider
-                    spawn_divider(scroll_content);
+                            // Divider
+                            spawn_divider(scroll_content);
 
-                    // Face Mapping Accordion
-                    spawn_mapping_section(scroll_content, &font, &dropdown_icon);
+                            // Face Mapping Accordion
+                            spawn_mapping_section(scroll_content, &font, &dropdown_icon);
 
-                    // Divider
-                    spawn_divider(scroll_content);
+                            // Divider
+                            spawn_divider(scroll_content);
 
-                    // Environment Settings Accordion
-                    spawn_environment_section(
-                        scroll_content,
-                        &font,
-                        &dropdown_icon,
-                        &rotate_left_icon,
-                        &rotate_right_icon,
-                    );
+                            // Environment Settings Accordion
+                            spawn_environment_section(
+                                scroll_content,
+                                &font,
+                                &dropdown_icon,
+                                &rotate_left_icon,
+                                &rotate_right_icon,
+                            );
+                        });
                 });
 
-            // Dynamic Scrollbar Track and Handle
+            // Dynamic Scrollbar Track and Handle (placed as a sibling to the scrollable viewport)
             parent
                 .spawn((
                     Node {

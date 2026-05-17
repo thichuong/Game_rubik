@@ -687,10 +687,25 @@ pub fn update_mapping_ui(
 
 pub fn handle_sidebar_scroll(
     mut mouse_wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
-    mut query: Query<(&Interaction, &mut ScrollPosition), With<SidebarScrollable>>,
+    mut query: Query<
+        (
+            &bevy::ui::UiGlobalTransform,
+            &ComputedNode,
+            &mut ScrollPosition,
+        ),
+        With<SidebarScrollable>,
+    >,
     content_query: Option<Single<&ComputedNode, With<ScrollContentWrapper>>>,
     viewport_query: Option<Single<&ComputedNode, With<SidebarScrollable>>>,
+    window_query: Option<Single<&Window, With<PrimaryWindow>>>,
 ) {
+    let Some(window) = window_query else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+
     let mut scroll_dy = 0.0;
     for event in mouse_wheel_events.read() {
         let dy = match event.unit {
@@ -713,8 +728,19 @@ pub fn handle_sidebar_scroll(
         };
         let max_scroll = (content_height - viewport_height).max(0.0);
 
-        for (interaction, mut scroll_pos) in &mut query {
-            if *interaction == Interaction::Hovered {
+        for (transform, computed_node, mut scroll_pos) in &mut query {
+            let size = computed_node.size();
+            let center_x = transform.translation.x;
+            let center_y = transform.translation.y;
+            let half_w = size.x / 2.0;
+            let half_h = size.y / 2.0;
+
+            let is_hovered = cursor_pos.x >= center_x - half_w
+                && cursor_pos.x <= center_x + half_w
+                && cursor_pos.y >= center_y - half_h
+                && cursor_pos.y <= center_y + half_h;
+
+            if is_hovered {
                 scroll_pos.0.y = (scroll_pos.0.y + scroll_dy).clamp(0.0, max_scroll);
             }
         }
