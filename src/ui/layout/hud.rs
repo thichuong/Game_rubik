@@ -72,7 +72,7 @@ fn spawn_hud_details_row(parent: &mut ChildSpawnerCommands, font: &Handle<Font>)
             // Left Column: Step display & Legend
             p.spawn(Node {
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(6.0),
+                row_gap: Val::Px(8.0),
                 flex_grow: 1.0,
                 ..default()
             })
@@ -89,9 +89,9 @@ fn spawn_hud_details_row(parent: &mut ChildSpawnerCommands, font: &Handle<Font>)
                 ));
 
                 col.spawn((
-                    Text::new("U: Up | D: Down | F: Front | B: Back | L: Left | R: Right"),
+                    Text::new("U: Up | D: Down | F: Front | B: Back | L: Left | R: Right\nX/Y/Z [idx]: Inner slice 'idx' (X: Left-Right | Y: Up-Down | Z: Front-Back)"),
                     TextFont {
-                        font_size: 11.0,
+                        font_size: 10.5,
                         font: font.clone(),
                         ..default()
                     },

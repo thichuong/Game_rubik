@@ -29,5 +29,8 @@ pub fn update_face_labels(
 
         // Keep the labels screen-aligned (billboarded) by matching the camera's rotation
         label_transform.rotation = camera_transform.rotation;
+
+        // Keep the labels at a constant premium scale regardless of cube size
+        label_transform.scale = Vec3::ONE;
     }
 }

@@ -260,7 +260,7 @@ fn spawn_face_axes(
         // while updating its position relative to the Rubik's cube.
         let label_parent_id = commands
             .spawn((
-                Transform::from_scale(Vec3::splat(scale)), // Scale letter size down
+                Transform::from_scale(Vec3::ONE), // Keep label size constant
                 Visibility::default(),
                 InheritedVisibility::default(),
                 FaceLabel3d {

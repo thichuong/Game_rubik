@@ -1,7 +1,7 @@
 use crate::environment::resources::EnvironmentSettings;
 use crate::events::ResetCameraEvent;
 use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
-use crate::rubik::resources::{RotationQueue, RubikSize, RubikSkin};
+use crate::rubik::resources::{MoveHistory, RotationQueue, RubikSize, RubikSkin};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
 use crate::ui::components::{
@@ -88,29 +88,32 @@ pub fn handle_solve_button(
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     solver_res: Res<SolverResource>,
     rubik_size: Res<RubikSize>,
+    mut history: ResMut<MoveHistory>,
+    mut rotation_queue: ResMut<RotationQueue>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
-                // Solver only supports 3x3x3 Rubik's cube, so prevent action on other sizes
-                if rubik_size.size != 3 {
-                    return;
-                }
-
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.35, 0.5, 1.0)));
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.4, 0.9, 0.6, 1.0)));
 
                 reset_camera.write(ResetCameraEvent);
 
+                // Stop any pending rotation animations instantly to prevent state mismatch
+                rotation_queue.0.clear();
+
                 solution.active = true;
                 solution.moves.clear();
                 solution.current_step = 0;
 
-                let state_str = helpers::get_cube_state(&faces, &cube_query);
+                let size = rubik_size.size;
 
-                match kewb::FaceCube::try_from(state_str.as_str()) {
-                    Ok(face_cube) => match kewb::CubieCube::try_from(&face_cube) {
-                        Ok(cubie_cube) => {
+                if size == 3 {
+                    let state_str = helpers::get_cube_state(&faces, &cube_query);
+
+                    let mut solved_with_kewb = false;
+                    if let Ok(face_cube) = kewb::FaceCube::try_from(state_str.as_str()) {
+                        if let Ok(cubie_cube) = kewb::CubieCube::try_from(&face_cube) {
                             let mut solver = kewb::Solver::new(&solver_res.table, 23, None);
                             if let Some(sol) = solver.solve(cubie_cube) {
                                 solution.moves = sol
@@ -118,12 +121,31 @@ pub fn handle_solve_button(
                                     .split_whitespace()
                                     .map(String::from)
                                     .collect();
+                                solved_with_kewb = true;
                             }
                         }
-                        Err(e) => error!("Invalid cube state: {:?}", e),
-                    },
-                    Err(e) => error!("Failed to parse face cube: {:?}", e),
+                    }
+
+                    if !solved_with_kewb && !history.done.is_empty() {
+                        solution.moves = history
+                            .done
+                            .iter()
+                            .rev()
+                            .map(|m| helpers::move_to_string(m.inverse(), size))
+                            .collect();
+                    }
+                } else if !history.done.is_empty() {
+                    solution.moves = history
+                        .done
+                        .iter()
+                        .rev()
+                        .map(|m| helpers::move_to_string(m.inverse(), size))
+                        .collect();
                 }
+
+                // Clear done and undone history upon solving to prevent conflicts
+                history.done.clear();
+                history.undone.clear();
             }
             Interaction::Hovered => {
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.32, 0.22, 0.95)));
@@ -141,6 +163,7 @@ pub fn handle_next_step_button(
     mut interaction_query: InteractionQuery<NextStepButton>,
     mut solution: ResMut<StepByStepSolution>,
     mut rotation_queue: ResMut<RotationQueue>,
+    rubik_size: Res<RubikSize>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -150,7 +173,7 @@ pub fn handle_next_step_button(
 
                 if solution.active && solution.current_step < solution.moves.len() {
                     let move_str = &solution.moves[solution.current_step];
-                    let moves = helpers::solution_to_moves(move_str);
+                    let moves = helpers::solution_to_moves(move_str, rubik_size.size);
                     for m in moves {
                         rotation_queue.0.push_back(m);
                     }
@@ -182,18 +205,19 @@ pub fn update_solution_panel(
         };
 
         if solution.active {
-            let mut full_text = String::new();
-            for (i, m) in solution.moves.iter().enumerate() {
-                if i == solution.current_step {
-                    let _ = write!(full_text, " >>{m}<< ");
-                } else {
-                    let _ = write!(full_text, " {m} ");
-                }
-            }
-
-            if solution.current_step >= solution.moves.len() {
+            if solution.moves.is_empty() {
+                text.0 = "Already solved or no moves recorded!".to_string();
+            } else if solution.current_step >= solution.moves.len() {
                 text.0 = "Solved!".to_string();
             } else {
+                let mut full_text = String::new();
+                for (i, m) in solution.moves.iter().enumerate() {
+                    if i == solution.current_step {
+                        let _ = write!(full_text, " >>{m}<< ");
+                    } else {
+                        let _ = write!(full_text, " {m} ");
+                    }
+                }
                 text.0 = format!(
                     "Step {}/{}\n\n{}",
                     solution.current_step + 1,
@@ -429,16 +453,9 @@ pub fn update_solve_button_state(
 ) {
     if rubik_size.is_changed() {
         let (mut bg, mut border) = solve_btn_query.into_inner();
-        if rubik_size.size == 3 {
-            // Restore beautiful green theme for 3x3x3 active solver
-            *bg = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.85)));
-            *border = BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6)));
-            text_query.0 = "SOLVE".to_string();
-        } else {
-            // Cool elegant dark gray theme indicating disabled solver state
-            *bg = BackgroundColor(Color::Srgba(Srgba::new(0.08, 0.08, 0.1, 0.4)));
-            *border = BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.15, 0.2, 0.2)));
-            text_query.0 = "SOLVE (3x3)".to_string();
-        }
+        // Restore beautiful green theme for active solver on all sizes
+        *bg = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.85)));
+        *border = BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6)));
+        text_query.0 = "SOLVE".to_string();
     }
 }
