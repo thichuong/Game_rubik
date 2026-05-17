@@ -49,8 +49,17 @@ graph TD
     subgraph RubikCore ["🧊 Rubik Module"]
         RubikPlugin["RubikPlugin"]
         RotQueue["RotationQueue Resource"]
-        PivotAnimate["Pivot Animation System"]
-        GridCoord["GridCoord & Entity Re-parenting"]
+        subgraph RubikSystems ["systems/ (Modular Systems)"]
+            SysOrch["systems.rs <br>(Module Orchestrator)"]
+            subgraph RubikCreation ["creation/ (Cube Initialization)"]
+                Creation["creation.rs <br>(Mesh & Materials Spawn)"]
+                Voxel["voxel.rs <br>(3D Voxel Letters Geometric Art)"]
+            end
+            Rotation["rotation.rs <br>(Rotation Queue & Pivot Animate)"]
+            Skin["skin.rs <br>(Skins Customization)"]
+            Label["label.rs <br>(3D Face Labels Billboard)"]
+            Interaction["interaction.rs <br>(RMB Orbit & Reset)"]
+        end
     end
 
     %% Interactions
@@ -61,8 +70,8 @@ graph TD
     InputPlugin -->|Calculates Swipe Axis| RotQueue
     SolverPlugin -->|Pushes Solution Moves| RotQueue
     
-    RotQueue -->|Feeds Moves| PivotAnimate
-    PivotAnimate -->|Rotates Entities| GridCoord
+    RotQueue -->|Feeds Moves| Rotation
+    Rotation -->|Rotates Entities & Reparents| Creation
     
     CameraPlugin -.->|Orbit Reference| InputPlugin
     CameraPlugin -.->|Rig Rotation Target| EnvPlugin
@@ -103,7 +112,16 @@ The core design patterns of this application are represented cleanly in its comp
 ## 🔄 Module Breakdown
 
 ### 1. Rubik Core Module (`src/rubik`)
-Manages structural rendering, mesh hierarchy, animation updates, and logical spatial tracking.
+Manages structural rendering, mesh hierarchy, animation updates, and logical spatial tracking. Refactored from a large monolithic codebase into highly decoupled submodules under strict **Clippy standards**.
+*   **Modular Architecture**:
+    *   [mod.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/mod.rs): Registers `RubikPlugin` and handles resource initialization.
+    *   [systems.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems.rs): The module entrypoint coordinating and re-exporting the systems.
+    *   [systems/creation.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/creation.rs): Spawns the central parent root, 27 cubies, colored facelets, and indicators.
+    *   [systems/creation/voxel.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/creation/voxel.rs): Contains geometric 3D voxel coordinates representing letters (`U`, `D`, `L`, `R`, `F`, `B`) and face color mappings.
+    *   [systems/rotation.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/rotation.rs): Manages the FIFO rotation queue and handles slice-rotation logic using Pivot entities.
+    *   [systems/skin.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/skin.rs): Applies custom textures or patterns dynamically.
+    *   [systems/label.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/label.rs): Matches the camera rotation to keep 3D face labels screen-aligned (billboard).
+    *   [systems/interaction.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/rubik/systems/interaction.rs): Implements free 360-degree rotation (RMB) and orientation reset events.
 *   **Cubie Generation**: Grid coordinate iteration spawns 27 cubies inside a central parent root entity. Colored stickers are spawned as children of the respective cubie transforms.
 *   **Decoupled Slice Animation**:
     1.  When a slice move starts, a temporary `Pivot` entity is spawned at the center.
