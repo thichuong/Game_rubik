@@ -35,10 +35,16 @@ fn setup_camera_listener(mut commands: Commands) {
         };
 
         loop {
-            if let Ok(Some(data)) = tracker.get_delta() {
-                let _ = tx.send(data);
+            match tracker.get_delta() {
+                Ok(Some(data)) => {
+                    let _ = tx.send(data);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("Hand tracker error: {e}");
+                }
             }
-            // Sleep short amount to not hog CPU 100%
+            // ~60 FPS processing rate
             thread::sleep(std::time::Duration::from_millis(16));
         }
     });
@@ -55,14 +61,14 @@ fn receive_hand_tracking(
     if let Some(receiver) = receiver {
         if let Ok(rx) = receiver.0.lock() {
             for data in rx.try_iter() {
-                // Always send the frame to the UI if we receive one
+                // Always send camera frame to UI for display
                 frame_events.write(CameraFrameEvent {
                     frame_rgba: data.frame_rgba,
                     width: data.width,
                     height: data.height,
                 });
 
-                // Only send rotation events if the tracking is enabled
+                // Only send rotation when tracking is enabled and hand is swiping
                 if enabled.0 {
                     if let Some((dx, dy)) = data.delta {
                         rot_events.write(HandRotationEvent {

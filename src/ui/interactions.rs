@@ -879,7 +879,11 @@ pub fn handle_sidebar_scrollbar_drag(
 pub type CameraToggleQuery<'w, 's> = Query<
     'w,
     's,
-    (&'static Interaction, &'static mut BackgroundColor, &'static mut BorderColor),
+    (
+        &'static Interaction,
+        &'static mut BackgroundColor,
+        &'static mut BorderColor,
+    ),
     (Changed<Interaction>, With<CameraTrackingButton>),
 >;
 
