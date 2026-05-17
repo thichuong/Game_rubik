@@ -25,7 +25,6 @@ impl Plugin for UiPlugin {
                 interactions::handle_size_increment_button,
                 interactions::update_size_slider_ui,
                 interactions::update_solve_button_state,
-                interactions::debug_all_interactions,
             ),
         );
     }

@@ -105,6 +105,7 @@ The core design patterns of this application are represented cleanly in its comp
 | `RubikMaterials` | Standard matte materials for faces and loaded skin texture handles. | `rubik::resources` |
 | `RubikSkin` | Current active skin selection (`Classic`, `Carbon`, `Geometric`, `Floral`). | `rubik::resources` |
 | `EnvironmentSettings` | Real-time settings matching sliders (clear color, light intensities, warm/cool temperature). | `environment::resources` |
+| `RubikSize` | Active dimension size of the Rubik's Cube (ranging from 2x2x2 up to 11x11x11, etc.). | `rubik::resources` |
 | `StepByStepSolution` | Current step index and calculated move strings generated from the automated solver. | `solver::resources` |
 
 ---
@@ -166,6 +167,9 @@ Manages the graphical interface, widgets, customize sidebar, and step-by-step gu
     *   [layout/environment.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout/environment.rs): Spawns detailed panels for real-time 3D lighting, temperature presets, angle controls, and scene backdrops.
     *   [layout/hud.rs](file:///home/tchuong/M%C3%A0n%20h%C3%ACnh%20n%E1%BB%81n/Game_rubik/src/ui/layout/hud.rs): Spawns the bottom-anchored step-by-step guidance dashboard.
 *   **Vector Rendering Excellence**: Uses the `bevy_resvg` framework to seamlessly render crystal-clear `.svg` vector icons into pixel-perfect Bevy UI meshes at runtime.
+*   **Interactive Size Slider (Bevy 0.18+ Best Practices)**:
+    *   **Invisible Picking Overlay**: In Bevy 0.18+, fully transparent nodes (`BackgroundColor(Color::NONE)`) are ignored by the picking engine. To create a highly responsive slider, the track implements a 1% opacity color overlay (`Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.01))`) rendered on top of the visuals to capture mouse drag gestures.
+    *   **UI Coordinate Hierarchy (`UiGlobalTransform`)**: Bevy 0.18+ completely decouples UI rendering from 3D camera matrices by using `UiGlobalTransform` instead of standard `GlobalTransform`. The dragging calculations query `UiGlobalTransform` to resolve the layout center coordinates (`transform.translation.x`) dynamically and map cursor movements to percentages.
 *   **Zero-Warning Clean Code**: Highly optimized visual spawning functions are aggressively divided into dedicated sub-functions (~30 to 60 lines each) to guarantee maximum code readability and strict Clippy pedantic compliance.
 
 ---

@@ -16,6 +16,11 @@ pub fn update_camera_orbit(orbit_query: Single<(&mut Transform, &mut OrbitCamera
 
     transform.translation = Vec3::new(x, y, z);
     transform.look_at(Vec3::ZERO, Vec3::Y);
+
+    // Shift camera slightly to the left (relative to its own orientation)
+    // so the Rubik's cube appears shifted to the right on the screen.
+    let left = -*transform.right();
+    transform.translation += left * 1.5;
 }
 
 /// System to handle camera reset event
