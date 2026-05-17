@@ -1,14 +1,15 @@
 use crate::environment::resources::EnvironmentSettings;
 use crate::events::ResetCameraEvent;
-use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
-use crate::rubik::resources::{MoveHistory, RotationQueue, RubikSize, RubikSkin};
+use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove, RubikCube};
+use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikSize, RubikSkin};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
 use crate::ui::components::{
-    CloseButton, EnvControl, EnvList, EnvToggleButton, NextStepButton, ShuffleButton,
-    SizeDecrementButton, SizeIncrementButton, SizeSliderFill, SizeSliderHandle, SizeSliderTrack,
-    SizeText, SkinButton, SkinList, SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText,
-    StepText,
+    CloseButton, EnvControl, EnvList, EnvToggleButton, MappingControl, MappingList,
+    MappingOrderText, MappingToggleButton, NextStepButton, ScrollContentWrapper, ShuffleButton,
+    SidebarScrollHandle, SidebarScrollState, SidebarScrollable, SizeDecrementButton,
+    SizeIncrementButton, SizeSliderFill, SizeSliderHandle, SizeSliderTrack, SizeText, SkinButton,
+    SkinList, SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText, StepText,
 };
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -88,6 +89,7 @@ pub fn handle_solve_button(
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     solver_res: Res<SolverResource>,
     rubik_size: Res<RubikSize>,
+    face_mapping: Res<FaceMapping>,
     mut history: ResMut<MoveHistory>,
     mut rotation_queue: ResMut<RotationQueue>,
 ) {
@@ -109,7 +111,7 @@ pub fn handle_solve_button(
                 let size = rubik_size.size;
 
                 if size == 3 {
-                    let state_str = helpers::get_cube_state(&faces, &cube_query);
+                    let state_str = helpers::get_cube_state(&faces, &cube_query, *face_mapping);
 
                     let mut solved_with_kewb = false;
                     if let Ok(face_cube) = kewb::FaceCube::try_from(state_str.as_str()) {
@@ -131,7 +133,7 @@ pub fn handle_solve_button(
                             .done
                             .iter()
                             .rev()
-                            .map(|m| helpers::move_to_string(m.inverse(), size))
+                            .map(|m| helpers::move_to_string(m.inverse(), size, *face_mapping))
                             .collect();
                     }
                 } else if !history.done.is_empty() {
@@ -139,7 +141,7 @@ pub fn handle_solve_button(
                         .done
                         .iter()
                         .rev()
-                        .map(|m| helpers::move_to_string(m.inverse(), size))
+                        .map(|m| helpers::move_to_string(m.inverse(), size, *face_mapping))
                         .collect();
                 }
 
@@ -164,6 +166,7 @@ pub fn handle_next_step_button(
     mut solution: ResMut<StepByStepSolution>,
     mut rotation_queue: ResMut<RotationQueue>,
     rubik_size: Res<RubikSize>,
+    face_mapping: Res<FaceMapping>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -173,7 +176,8 @@ pub fn handle_next_step_button(
 
                 if solution.active && solution.current_step < solution.moves.len() {
                     let move_str = &solution.moves[solution.current_step];
-                    let moves = helpers::solution_to_moves(move_str, rubik_size.size);
+                    let moves =
+                        helpers::solution_to_moves(move_str, rubik_size.size, *face_mapping);
                     for m in moves {
                         rotation_queue.0.push_back(m);
                     }
@@ -469,5 +473,375 @@ pub fn update_solve_button_state(
         *bg = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.85)));
         *border = BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6)));
         text_query.0 = "SOLVE".to_string();
+    }
+}
+
+pub type MappingToggleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor),
+    (Changed<Interaction>, With<MappingToggleButton>),
+>;
+
+pub fn handle_mapping_toggle(
+    mut interaction_query: MappingToggleQuery,
+    mut mapping_list: Single<&mut Node, With<MappingList>>,
+    mut state: Local<bool>,
+) {
+    for (interaction, mut bg_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *state = !*state;
+                mapping_list.display = if *state { Display::Flex } else { Display::None };
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.22, 0.22, 0.28, 0.95)));
+            }
+            Interaction::Hovered => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.18, 0.18, 0.22, 0.85)));
+            }
+            Interaction::None => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.12, 0.15, 0.6)));
+            }
+        }
+    }
+}
+
+pub type MappingControlQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Interaction,
+        &'static MappingControl,
+        &'static mut BackgroundColor,
+    ),
+    (Changed<Interaction>, With<Button>),
+>;
+
+pub fn handle_mapping_controls(
+    mut interaction_query: MappingControlQuery,
+    mut mapping: ResMut<FaceMapping>,
+) {
+    for (interaction, control, mut bg_color) in &mut interaction_query {
+        if matches!(*interaction, Interaction::Pressed) {
+            match *control {
+                MappingControl::ToggleOrder => {
+                    mapping.select_d_first = !mapping.select_d_first;
+                }
+                MappingControl::SelectF(face) => {
+                    if mapping.select_d_first {
+                        // D First: only allow if perpendicular to current D
+                        if mapping.d_face.normal().dot(face.normal()).abs() < 0.1 {
+                            mapping.f_face = face;
+                        }
+                    } else {
+                        // F First: allow any selection, auto-resolve D if conflict
+                        mapping.f_face = face;
+                        if mapping.d_face.normal().dot(face.normal()).abs() > 0.9 {
+                            // Conflict! Auto-select a perpendicular face
+                            mapping.d_face = if face == Face::Up || face == Face::Down {
+                                Face::Front
+                            } else {
+                                Face::Up
+                            };
+                        }
+                    }
+                }
+                MappingControl::SelectD(face) => {
+                    if mapping.select_d_first {
+                        // D First: allow any selection, auto-resolve F if conflict
+                        mapping.d_face = face;
+                        if mapping.f_face.normal().dot(face.normal()).abs() > 0.9 {
+                            // Conflict! Auto-select a perpendicular face
+                            mapping.f_face = if face == Face::Up || face == Face::Down {
+                                Face::Front
+                            } else {
+                                Face::Up
+                            };
+                        }
+                    } else {
+                        // F First: only allow if perpendicular to current F
+                        if mapping.f_face.normal().dot(face.normal()).abs() < 0.1 {
+                            mapping.d_face = face;
+                        }
+                    }
+                }
+            }
+            *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.5, 1.0)));
+        }
+    }
+}
+
+pub fn update_mapping_ui(
+    mapping: Res<FaceMapping>,
+    mut order_text_query: Query<&mut Text, With<MappingOrderText>>,
+    mut button_query: Query<
+        (
+            &MappingControl,
+            &mut Node,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Button>,
+    >,
+) {
+    if mapping.is_changed() {
+        // 1. Update priority text
+        for mut text in &mut order_text_query {
+            text.0 = if mapping.select_d_first {
+                "Priority: D First".to_string()
+            } else {
+                "Priority: F First".to_string()
+            };
+        }
+
+        // 2. Update button styles based on selected FaceMapping
+        for (control, mut node, mut bg_color, mut border_color) in &mut button_query {
+            match *control {
+                MappingControl::ToggleOrder => {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.15, 0.25, 0.85)));
+                    *border_color =
+                        BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.35, 0.55, 0.6)));
+                    node.display = Display::Flex;
+                }
+                MappingControl::SelectF(face) => {
+                    let is_selected = mapping.f_face == face;
+
+                    if mapping.select_d_first {
+                        // D First: F is the second choice (only show 4 perpendicular to D)
+                        let is_disabled = mapping.d_face.normal().dot(face.normal()).abs() > 0.9;
+                        if is_disabled {
+                            node.display = Display::None;
+                        } else {
+                            node.display = Display::Flex;
+                            if is_selected {
+                                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(
+                                    0.15, 0.45, 0.25, 0.85,
+                                )));
+                                *border_color =
+                                    BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.8, 0.4, 0.9)));
+                            } else {
+                                *bg_color =
+                                    BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.7)));
+                                *border_color =
+                                    BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.4)));
+                            }
+                        }
+                    } else {
+                        // F First: F is the first choice (show all 6)
+                        node.display = Display::Flex;
+                        if is_selected {
+                            *bg_color =
+                                BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.45, 0.25, 0.85)));
+                            *border_color =
+                                BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.8, 0.4, 0.9)));
+                        } else {
+                            *bg_color =
+                                BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.7)));
+                            *border_color =
+                                BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.4)));
+                        }
+                    }
+                }
+                MappingControl::SelectD(face) => {
+                    let is_selected = mapping.d_face == face;
+
+                    if mapping.select_d_first {
+                        // D First: D is the first choice (show all 6)
+                        node.display = Display::Flex;
+                        if is_selected {
+                            *bg_color =
+                                BackgroundColor(Color::Srgba(Srgba::new(0.45, 0.35, 0.1, 0.85)));
+                            *border_color =
+                                BorderColor::all(Color::Srgba(Srgba::new(0.8, 0.6, 0.2, 0.9)));
+                        } else {
+                            *bg_color =
+                                BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.7)));
+                            *border_color =
+                                BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.4)));
+                        }
+                    } else {
+                        // F First: D is the second choice (only show 4 perpendicular to F)
+                        let is_disabled = mapping.f_face.normal().dot(face.normal()).abs() > 0.9;
+                        if is_disabled {
+                            node.display = Display::None;
+                        } else {
+                            node.display = Display::Flex;
+                            if is_selected {
+                                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(
+                                    0.45, 0.35, 0.1, 0.85,
+                                )));
+                                *border_color =
+                                    BorderColor::all(Color::Srgba(Srgba::new(0.8, 0.6, 0.2, 0.9)));
+                            } else {
+                                *bg_color =
+                                    BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.1, 0.12, 0.7)));
+                                *border_color =
+                                    BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.4)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn handle_sidebar_scroll(
+    mut mouse_wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut query: Query<(&Interaction, &mut ScrollPosition), With<SidebarScrollable>>,
+    content_query: Option<Single<&ComputedNode, With<ScrollContentWrapper>>>,
+    viewport_query: Option<Single<&ComputedNode, With<SidebarScrollable>>>,
+) {
+    let mut scroll_dy = 0.0;
+    for event in mouse_wheel_events.read() {
+        let dy = match event.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => event.y * 35.0,
+            bevy::input::mouse::MouseScrollUnit::Pixel => event.y,
+        };
+        scroll_dy -= dy;
+    }
+
+    if scroll_dy != 0.0 {
+        let content_height = if let Some(node) = content_query {
+            node.size.y
+        } else {
+            0.0
+        };
+        let viewport_height = if let Some(node) = viewport_query {
+            node.size.y
+        } else {
+            0.0
+        };
+        let max_scroll = (content_height - viewport_height).max(0.0);
+
+        for (interaction, mut scroll_pos) in &mut query {
+            if *interaction == Interaction::Hovered {
+                scroll_pos.0.y = (scroll_pos.0.y + scroll_dy).clamp(0.0, max_scroll);
+            }
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn update_sidebar_scrollbar_visuals(
+    scroll_data: Option<Single<(&ComputedNode, &ScrollPosition), With<SidebarScrollable>>>,
+    content_node: Option<Single<&ComputedNode, With<ScrollContentWrapper>>>,
+    handle_data: Option<
+        Single<(&Interaction, &mut Node, &mut BackgroundColor), With<SidebarScrollHandle>>,
+    >,
+    scroll_state: Res<SidebarScrollState>,
+) {
+    let Some(scroll_data) = scroll_data else {
+        return;
+    };
+    let Some(content_node) = content_node else {
+        return;
+    };
+    let Some(mut handle_data) = handle_data else {
+        return;
+    };
+
+    let viewport_height = scroll_data.0.size.y;
+    let scroll_pos = scroll_data.1;
+    let content_height = content_node.size.y;
+
+    if content_height <= viewport_height {
+        handle_data.1.display = Display::None;
+        return;
+    }
+
+    handle_data.1.display = Display::Flex;
+
+    let track_height = viewport_height - 20.0; // 10px top/bottom padding
+    let handle_height = ((viewport_height / content_height) * track_height).max(30.0);
+
+    let max_scroll = content_height - viewport_height;
+    let ratio = if max_scroll > 0.0 {
+        scroll_pos.0.y / max_scroll
+    } else {
+        0.0
+    };
+    let handle_top = ratio * (track_height - handle_height);
+
+    handle_data.1.height = Val::Px(handle_height);
+    handle_data.1.top = Val::Px(handle_top);
+
+    let interaction = handle_data.0;
+
+    // Dynamic background color based on interaction state
+    if scroll_state.is_dragging {
+        *handle_data.2 = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.6, 0.9, 0.9)));
+    } else {
+        match *interaction {
+            Interaction::Pressed => {
+                *handle_data.2 = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.6, 0.9, 0.9)));
+            }
+            Interaction::Hovered => {
+                *handle_data.2 = BackgroundColor(Color::Srgba(Srgba::new(0.35, 0.35, 0.45, 0.8)));
+            }
+            Interaction::None => {
+                *handle_data.2 = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.25, 0.35, 0.55)));
+            }
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn handle_sidebar_scrollbar_drag(
+    mut scroll_state: ResMut<SidebarScrollState>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Option<Single<&Window, With<PrimaryWindow>>>,
+    scroll_data: Option<Single<(&ComputedNode, &mut ScrollPosition), With<SidebarScrollable>>>,
+    content_node: Option<Single<&ComputedNode, With<ScrollContentWrapper>>>,
+    handle_data: Option<Single<(&Interaction, &ComputedNode), With<SidebarScrollHandle>>>,
+) {
+    let Some(mut scroll_data) = scroll_data else {
+        return;
+    };
+    let Some(content_node) = content_node else {
+        return;
+    };
+    let Some(handle_data) = handle_data else {
+        return;
+    };
+
+    let Some(window) = windows else {
+        return;
+    };
+    let cursor_y = if let Some(pos) = window.cursor_position() {
+        pos.y
+    } else {
+        return;
+    };
+
+    let viewport_height = scroll_data.0.size.y;
+    let content_height = content_node.size.y;
+    let handle_height = handle_data.1.size.y;
+
+    let max_scroll = (content_height - viewport_height).max(0.0);
+    if max_scroll <= 0.0 {
+        scroll_state.is_dragging = false;
+        return;
+    }
+
+    let track_height = viewport_height - 20.0;
+    let scrollable_track_range = (track_height - handle_height).max(1.0);
+
+    let interaction = handle_data.0;
+
+    if mouse_input.just_pressed(MouseButton::Left) && *interaction == Interaction::Pressed {
+        scroll_state.is_dragging = true;
+        scroll_state.drag_start_cursor_y = cursor_y;
+        scroll_state.drag_start_scroll_y = scroll_data.1 .0.y;
+    }
+
+    if scroll_state.is_dragging {
+        if mouse_input.pressed(MouseButton::Left) {
+            let delta_cursor_y = cursor_y - scroll_state.drag_start_cursor_y;
+            let delta_scroll_y = delta_cursor_y * (max_scroll / scrollable_track_range);
+            scroll_data.1 .0.y =
+                (scroll_state.drag_start_scroll_y + delta_scroll_y).clamp(0.0, max_scroll);
+        } else {
+            scroll_state.is_dragging = false;
+        }
     }
 }

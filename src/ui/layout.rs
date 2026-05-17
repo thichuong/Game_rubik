@@ -1,18 +1,23 @@
 mod environment;
 mod hud;
+mod mapping;
 mod sidebar;
 
-use crate::ui::components::SolutionPanel;
+use crate::ui::components::{
+    ScrollContentWrapper, SidebarScrollHandle, SidebarScrollTrack, SidebarScrollable, SolutionPanel,
+};
 use bevy::ecs::prelude::ChildSpawnerCommands;
 use bevy::prelude::*;
 
 pub use environment::spawn_environment_section;
 pub use hud::spawn_solution_hud;
+pub use mapping::spawn_mapping_section;
 pub use sidebar::{
     spawn_controls, spawn_divider, spawn_header, spawn_size_section, spawn_skins_section,
 };
 
 /// Set up the UI with a premium layout divided into helper functions.
+#[allow(clippy::too_many_lines)]
 pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/font.ttf");
     let dropdown_icon = asset_server.load("textures/icons/dropdown_arrow.svg");
@@ -29,48 +34,102 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 bottom: Val::Px(20.0),
                 width: Val::Px(320.0),
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(20.0)),
-                row_gap: Val::Px(15.0),
+                padding: UiRect::horizontal(Val::Px(20.0)),
                 border_radius: BorderRadius::all(Val::Px(24.0)),
+                overflow: Overflow::scroll_y(),
                 ..default()
             },
             BackgroundColor(Color::Srgba(Srgba::new(0.06, 0.06, 0.09, 0.85))),
             BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.25, 0.35, 0.4))),
             Interaction::default(),
+            ScrollPosition::default(),
+            SidebarScrollable,
         ))
         .with_children(|parent: &mut ChildSpawnerCommands| {
-            // Header
-            spawn_header(parent, &font);
+            // Scroll Content Wrapper to prevent Flexbox from shrinking items
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(15.0),
+                        padding: UiRect::vertical(Val::Px(20.0)),
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    ScrollContentWrapper,
+                ))
+                .with_children(|scroll_content: &mut ChildSpawnerCommands| {
+                    // Header
+                    spawn_header(scroll_content, &font);
 
-            // Divider
-            spawn_divider(parent);
+                    // Divider
+                    spawn_divider(scroll_content);
 
-            // Cube Size Section
-            spawn_size_section(parent, &font);
+                    // Cube Size Section
+                    spawn_size_section(scroll_content, &font);
 
-            // Divider
-            spawn_divider(parent);
+                    // Divider
+                    spawn_divider(scroll_content);
 
-            // Controls (Actions)
-            spawn_controls(parent, &font);
+                    // Controls (Actions)
+                    spawn_controls(scroll_content, &font);
 
-            // Divider
-            spawn_divider(parent);
+                    // Divider
+                    spawn_divider(scroll_content);
 
-            // Cube Skins Accordion
-            spawn_skins_section(parent, &font, &dropdown_icon);
+                    // Cube Skins Accordion
+                    spawn_skins_section(scroll_content, &font, &dropdown_icon);
 
-            // Divider
-            spawn_divider(parent);
+                    // Divider
+                    spawn_divider(scroll_content);
 
-            // Environment Settings Accordion
-            spawn_environment_section(
-                parent,
-                &font,
-                &dropdown_icon,
-                &rotate_left_icon,
-                &rotate_right_icon,
-            );
+                    // Face Mapping Accordion
+                    spawn_mapping_section(scroll_content, &font, &dropdown_icon);
+
+                    // Divider
+                    spawn_divider(scroll_content);
+
+                    // Environment Settings Accordion
+                    spawn_environment_section(
+                        scroll_content,
+                        &font,
+                        &dropdown_icon,
+                        &rotate_left_icon,
+                        &rotate_right_icon,
+                    );
+                });
+
+            // Dynamic Scrollbar Track and Handle
+            parent
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(4.0),
+                        top: Val::Px(10.0),
+                        bottom: Val::Px(10.0),
+                        width: Val::Px(6.0),
+                        border_radius: BorderRadius::all(Val::Px(3.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.2))),
+                    SidebarScrollTrack,
+                ))
+                .with_children(|track_parent| {
+                    track_parent.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(0.0),
+                            width: Val::Percent(100.0),
+                            height: Val::Px(60.0),
+                            border_radius: BorderRadius::all(Val::Px(3.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.25, 0.35, 0.55))),
+                        Interaction::default(),
+                        SidebarScrollHandle,
+                    ));
+                });
         });
 
     // Horizontal Bottom Solution HUD

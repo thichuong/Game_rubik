@@ -1,3 +1,4 @@
+use crate::rubik::components::Face;
 use crate::rubik::resources::SkinType;
 use bevy::prelude::*;
 
@@ -62,3 +63,39 @@ pub struct SizeText;
 
 #[derive(Component)]
 pub struct SolveButtonText;
+
+// Face Mapping UI Components
+#[derive(Component)]
+pub struct MappingToggleButton;
+
+#[derive(Component)]
+pub struct MappingList;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappingControl {
+    ToggleOrder,
+    SelectF(Face),
+    SelectD(Face),
+}
+
+#[derive(Component)]
+pub struct MappingOrderText;
+
+#[derive(Component)]
+pub struct SidebarScrollable;
+
+#[derive(Component)]
+pub struct ScrollContentWrapper;
+
+#[derive(Component)]
+pub struct SidebarScrollTrack;
+
+#[derive(Component)]
+pub struct SidebarScrollHandle;
+
+#[derive(Resource, Default)]
+pub struct SidebarScrollState {
+    pub is_dragging: bool,
+    pub drag_start_cursor_y: f32,
+    pub drag_start_scroll_y: f32,
+}

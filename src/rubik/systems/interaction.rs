@@ -31,8 +31,9 @@ pub fn update_rubik_rotation(
 pub fn handle_cube_reset(
     mut events: MessageReader<ResetCameraEvent>,
     mut cube_transform: Single<&mut Transform, With<RubikCube>>,
+    face_mapping: Res<crate::rubik::resources::FaceMapping>,
 ) {
     for _ in events.read() {
-        cube_transform.rotation = Quat::IDENTITY;
+        cube_transform.rotation = face_mapping.get_rotation();
     }
 }

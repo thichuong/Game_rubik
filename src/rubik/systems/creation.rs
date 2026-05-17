@@ -1,5 +1,5 @@
 use crate::rubik::components::{Cubie, CubieFace, Face, FaceLabel3d, RubikCube};
-use crate::rubik::resources::{MoveHistory, RotationQueue, RubikMaterials, RubikSize};
+use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikMaterials, RubikSize};
 use bevy::prelude::*;
 
 pub mod voxel;
@@ -73,6 +73,7 @@ pub fn spawn_rubik_cube(
     materials: Res<RubikMaterials>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     rubik_size: Res<RubikSize>,
+    face_mapping: Res<FaceMapping>,
 ) {
     spawn_rubik_cube_internal(
         &mut commands,
@@ -80,6 +81,7 @@ pub fn spawn_rubik_cube(
         &mut meshes,
         &materials,
         &mut standard_materials,
+        *face_mapping,
     );
 }
 
@@ -90,6 +92,7 @@ pub fn spawn_rubik_cube_internal(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &Res<RubikMaterials>,
     standard_materials: &mut ResMut<Assets<StandardMaterial>>,
+    mapping: FaceMapping,
 ) {
     let cube_root = commands
         .spawn((
@@ -169,7 +172,15 @@ pub fn spawn_rubik_cube_internal(
     }
 
     // Spawn elegant white axes lines and face label text (U, D, L, R, F, B) from the center of each face outwards
-    spawn_face_axes(commands, cube_root, size, scale, meshes, standard_materials);
+    spawn_face_axes(
+        commands,
+        cube_root,
+        size,
+        scale,
+        meshes,
+        standard_materials,
+        mapping,
+    );
 }
 
 fn spawn_face(
@@ -194,73 +205,41 @@ fn spawn_face(
 }
 
 #[allow(clippy::cast_precision_loss)]
-fn spawn_face_axes(
+fn spawn_face_labels(
     commands: &mut Commands,
-    cube_root: Entity,
     size: i32,
-    scale: f32,
     meshes: &mut ResMut<Assets<Mesh>>,
     standard_materials: &mut ResMut<Assets<StandardMaterial>>,
+    mapping: FaceMapping,
 ) {
+    let scale = 3.0 / size as f32;
     let current_gap = GAP * scale;
-    let line_mesh = meshes.add(Cuboid::new(0.012 * scale, 0.012 * scale, 1.2 * scale)); // Scale line thickness and length
+    let half_cube_size = (size as f32 / 2.0) * current_gap;
+    let line_length = 1.2;
+    let label_dist = half_cube_size + line_length + 0.12;
 
     let faces_info = [
-        (Face::Up, "U"),
-        (Face::Down, "D"),
-        (Face::Left, "L"),
-        (Face::Right, "R"),
-        (Face::Front, "F"),
-        (Face::Back, "B"),
+        (Face::Up, mapping.get_label_for_face(Face::Up)),
+        (Face::Down, mapping.get_label_for_face(Face::Down)),
+        (Face::Left, mapping.get_label_for_face(Face::Left)),
+        (Face::Right, mapping.get_label_for_face(Face::Right)),
+        (Face::Front, mapping.get_label_for_face(Face::Front)),
+        (Face::Back, mapping.get_label_for_face(Face::Back)),
     ];
 
-    let half_cube_size = (size as f32 / 2.0) * current_gap;
-    let line_length = 1.2 * scale;
-    let line_center_dist = half_cube_size + line_length / 2.0;
-    let label_dist = 0.12f32.mul_add(scale, half_cube_size + line_length);
-
     for (face, label) in faces_info {
-        let normal = face.normal();
         let face_color = voxel::get_face_color(face);
 
-        // Create a faded, semi-transparent material for the axis lines (hologram laser effect)
-        let mut line_color = face_color;
-        line_color.alpha = 0.25; // 25% opacity for elegant blend
-        let line_material = standard_materials.add(StandardMaterial {
-            base_color: Color::Srgba(line_color),
-            unlit: true,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        });
-
-        // Create a solid unlit material for the voxel letter
         let letter_material = standard_materials.add(StandardMaterial {
             base_color: Color::Srgba(face_color),
             unlit: true,
             ..default()
         });
 
-        // Calculate the line transform
-        let line_translation = normal * line_center_dist;
-        let line_rotation = Quat::from_rotation_arc(Vec3::Z, normal);
-
-        let line_id = commands
-            .spawn((
-                Mesh3d(line_mesh.clone()),
-                MeshMaterial3d(line_material),
-                Transform::from_translation(line_translation).with_rotation(line_rotation),
-            ))
-            .id();
-
-        commands.entity(cube_root).add_child(line_id);
-
         // Spawn a parent entity for the 3D voxel letter
-        // It is spawned independently in world space (not a child of cube_root)
-        // so that it can maintain its screen-aligned rotation (billboard)
-        // while updating its position relative to the Rubik's cube.
         let label_parent_id = commands
             .spawn((
-                Transform::from_scale(Vec3::ONE), // Keep label size constant
+                Transform::from_scale(Vec3::ONE),
                 Visibility::default(),
                 InheritedVisibility::default(),
                 FaceLabel3d {
@@ -287,11 +266,71 @@ fn spawn_face_axes(
     }
 }
 
-/// System to recreate Rubik when `RubikSize` changes
+#[allow(clippy::cast_precision_loss)]
+fn spawn_face_axes(
+    commands: &mut Commands,
+    cube_root: Entity,
+    size: i32,
+    scale: f32,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    standard_materials: &mut ResMut<Assets<StandardMaterial>>,
+    mapping: FaceMapping,
+) {
+    let current_gap = GAP * scale;
+    let line_length = 1.2;
+    let line_mesh = meshes.add(Cuboid::new(0.012, 0.012, line_length));
+
+    let faces_info = [
+        Face::Up,
+        Face::Down,
+        Face::Left,
+        Face::Right,
+        Face::Front,
+        Face::Back,
+    ];
+
+    let half_cube_size = (size as f32 / 2.0) * current_gap;
+    let line_center_dist = half_cube_size + line_length / 2.0;
+
+    for face in faces_info {
+        let normal = face.normal();
+        let face_color = voxel::get_face_color(face);
+
+        // Create a faded, semi-transparent material for the axis lines (hologram laser effect)
+        let mut line_color = face_color;
+        line_color.alpha = 0.25;
+        let line_material = standard_materials.add(StandardMaterial {
+            base_color: Color::Srgba(line_color),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+
+        // Calculate the line transform
+        let line_translation = normal * line_center_dist;
+        let line_rotation = Quat::from_rotation_arc(Vec3::Z, normal);
+
+        let line_id = commands
+            .spawn((
+                Mesh3d(line_mesh.clone()),
+                MeshMaterial3d(line_material),
+                Transform::from_translation(line_translation).with_rotation(line_rotation),
+            ))
+            .id();
+
+        commands.entity(cube_root).add_child(line_id);
+    }
+
+    // Spawn billboarded 3D voxel labels
+    spawn_face_labels(commands, size, meshes, standard_materials, mapping);
+}
+
+/// System to recreate Rubik when `RubikSize` changes, or rotate it & recreate labels when `FaceMapping` changes
 pub fn handle_rubik_resize(
     mut commands: Commands,
     rubik_size: Res<RubikSize>,
-    cube_query: Query<Entity, With<RubikCube>>,
+    face_mapping: Res<FaceMapping>,
+    cube_query: Query<(Entity, &mut Transform), With<RubikCube>>,
     label_query: Query<Entity, With<FaceLabel3d>>,
     mut queue: ResMut<RotationQueue>,
     mut history: ResMut<MoveHistory>,
@@ -299,9 +338,12 @@ pub fn handle_rubik_resize(
     materials: Res<RubikMaterials>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if rubik_size.is_changed() && !rubik_size.is_added() {
+    let size_changed = rubik_size.is_changed() && !rubik_size.is_added();
+    let mapping_changed = face_mapping.is_changed() && !face_mapping.is_added();
+
+    if size_changed {
         // Despawn old RubikCube and all children (cubies, faces, lines)
-        for entity in &cube_query {
+        for (entity, _) in &cube_query {
             commands.entity(entity).despawn();
         }
         // Despawn old FaceLabels (they are spawned independently in world space)
@@ -321,6 +363,21 @@ pub fn handle_rubik_resize(
             &mut meshes,
             &materials,
             &mut standard_materials,
+            *face_mapping,
+        );
+    } else if mapping_changed {
+        // If ONLY face mapping changed, DO NOT recreate the cube (keep scrambled state).
+        // And DO NOT automatically rotate the Rubik's cube here (keep physical colors in place for easy user tracking).
+        // Just regenerate the 3D Face Labels to reflect the new letter configurations.
+        for entity in &label_query {
+            commands.entity(entity).despawn();
+        }
+        spawn_face_labels(
+            &mut commands,
+            rubik_size.size,
+            &mut meshes,
+            &mut standard_materials,
+            *face_mapping,
         );
     }
 }

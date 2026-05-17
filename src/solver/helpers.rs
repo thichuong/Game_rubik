@@ -1,24 +1,26 @@
 use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove};
+use crate::rubik::resources::FaceMapping;
 use bevy::prelude::*;
 
 pub fn get_cube_state(
     faces: &Query<(&CubieFace, &GlobalTransform)>,
     cube_transform: &GlobalTransform,
+    mapping: FaceMapping,
 ) -> String {
     let mut state = vec![' '; 54];
 
-    // Face configurations: (Face normal, Right vector, Down vector)
-    let face_configs = [
-        (Face::Up, Vec3::X, Vec3::Z),            // U (+Y)
-        (Face::Right, Vec3::NEG_Z, Vec3::NEG_Y), // R (+X)
-        (Face::Front, Vec3::X, Vec3::NEG_Y),     // F (+Z)
-        (Face::Down, Vec3::X, Vec3::NEG_Z),      // D (-Y)
-        (Face::Left, Vec3::Z, Vec3::NEG_Y),      // L (-X)
-        (Face::Back, Vec3::NEG_X, Vec3::NEG_Y),  // B (-Z)
+    let logic_faces = [
+        Face::Up,
+        Face::Right,
+        Face::Front,
+        Face::Down,
+        Face::Left,
+        Face::Back,
     ];
 
-    for (face_idx, (face, right_vec, down_vec)) in face_configs.iter().enumerate() {
-        let normal = face.normal();
+    for (face_idx, &logic_face) in logic_faces.iter().enumerate() {
+        let (phys_face, right_vec, down_vec) = mapping.get_face_config(logic_face);
+        let normal = phys_face.normal();
         for row in 0..3 {
             for col in 0..3 {
                 #[allow(clippy::cast_precision_loss)]
@@ -30,9 +32,13 @@ pub fn get_cube_state(
                 if let Some(color) =
                     find_facelet_color_at(target_pos, normal, faces, cube_transform)
                 {
-                    state[face_idx * 9 + row * 3 + col] = face_to_char(color);
+                    state[face_idx * 9 + row * 3 + col] =
+                        mapping.get_char_for_physical_color(color);
                 } else {
-                    error!("Missing facelet at {:?} for face {:?}", target_pos, face);
+                    error!(
+                        "Missing facelet at {:?} for face {:?}",
+                        target_pos, phys_face
+                    );
                 }
             }
         }
@@ -62,18 +68,7 @@ fn find_facelet_color_at(
     None
 }
 
-const fn face_to_char(face: Face) -> char {
-    match face {
-        Face::Up => 'U',
-        Face::Down => 'D',
-        Face::Right => 'R',
-        Face::Left => 'L',
-        Face::Front => 'F',
-        Face::Back => 'B',
-    }
-}
-
-pub fn solution_to_moves(solution: &str, size: i32) -> Vec<RotationMove> {
+pub fn solution_to_moves(solution: &str, size: i32, mapping: FaceMapping) -> Vec<RotationMove> {
     let mut all_moves = Vec::new();
     for part in solution.split_whitespace() {
         let mut chars = part.chars();
@@ -106,42 +101,28 @@ pub fn solution_to_moves(solution: &str, size: i32) -> Vec<RotationMove> {
                 };
                 (axis, idx, Direction::Clockwise, modifier_char)
             }
-            'U' => (
-                RotationAxis::Y,
-                size - 1,
-                Direction::Clockwise,
-                chars.next(),
-            ),
-            'D' => (
-                RotationAxis::Y,
-                0,
-                Direction::CounterClockwise,
-                chars.next(),
-            ),
-            'L' => (
-                RotationAxis::X,
-                0,
-                Direction::CounterClockwise,
-                chars.next(),
-            ),
-            'R' => (
-                RotationAxis::X,
-                size - 1,
-                Direction::Clockwise,
-                chars.next(),
-            ),
-            'F' => (
-                RotationAxis::Z,
-                size - 1,
-                Direction::Clockwise,
-                chars.next(),
-            ),
-            'B' => (
-                RotationAxis::Z,
-                0,
-                Direction::CounterClockwise,
-                chars.next(),
-            ),
+            'U' | 'D' | 'L' | 'R' | 'F' | 'B' => {
+                let logic_face = match first_char {
+                    'U' => Face::Up,
+                    'D' => Face::Down,
+                    'L' => Face::Left,
+                    'R' => Face::Right,
+                    'F' => Face::Front,
+                    _ => Face::Back,
+                };
+
+                let modifier = chars.next();
+                let is_inverse = modifier == Some('\'');
+                let phys_move = mapping.logic_move_to_physical_move(logic_face, is_inverse, size);
+
+                let is_double = modifier == Some('2');
+
+                all_moves.push(phys_move);
+                if is_double {
+                    all_moves.push(phys_move);
+                }
+                continue;
+            }
             _ => continue,
         };
 
@@ -174,28 +155,7 @@ pub fn solution_to_moves(solution: &str, size: i32) -> Vec<RotationMove> {
     all_moves
 }
 
-/// Convert a `RotationMove` into a standard string representation, respecting the Rubik's cube size.
-pub fn move_to_string(m: RotationMove, size: i32) -> String {
-    let base = match (m.axis, m.index) {
-        (RotationAxis::Y, idx) if idx == size - 1 => "U".to_string(),
-        (RotationAxis::Y, 0) => "D".to_string(),
-        (RotationAxis::X, 0) => "L".to_string(),
-        (RotationAxis::X, idx) if idx == size - 1 => "R".to_string(),
-        (RotationAxis::Z, idx) if idx == size - 1 => "F".to_string(),
-        (RotationAxis::Z, 0) => "B".to_string(),
-        (RotationAxis::X, idx) => format!("X{idx}"),
-        (RotationAxis::Y, idx) => format!("Y{idx}"),
-        (RotationAxis::Z, idx) => format!("Z{idx}"),
-    };
-
-    let base_dir = match base.chars().next() {
-        Some('D' | 'L' | 'B') => Direction::CounterClockwise,
-        _ => Direction::Clockwise,
-    };
-
-    if m.direction == base_dir {
-        base
-    } else {
-        format!("{base}'")
-    }
+/// Convert a `RotationMove` into a standard string representation, respecting the Rubik's cube size and `FaceMapping`.
+pub fn move_to_string(m: RotationMove, size: i32, mapping: FaceMapping) -> String {
+    mapping.physical_move_to_logic_string(m, size)
 }

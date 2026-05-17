@@ -56,6 +56,26 @@ impl Face {
             Self::Back => Vec3::NEG_Z,
         }
     }
+
+    /// Find the Face corresponding to a normal vector
+    pub fn from_normal(normal: Vec3) -> Option<Self> {
+        let n = normal.round();
+        if n.distance(Vec3::Y) < 0.1 {
+            Some(Self::Up)
+        } else if n.distance(Vec3::NEG_Y) < 0.1 {
+            Some(Self::Down)
+        } else if n.distance(Vec3::X) < 0.1 {
+            Some(Self::Right)
+        } else if n.distance(Vec3::NEG_X) < 0.1 {
+            Some(Self::Left)
+        } else if n.distance(Vec3::Z) < 0.1 {
+            Some(Self::Front)
+        } else if n.distance(Vec3::NEG_Z) < 0.1 {
+            Some(Self::Back)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
