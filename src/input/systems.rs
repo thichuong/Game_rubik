@@ -1,9 +1,11 @@
 use crate::input::resources::DragState;
 use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
-use crate::rubik::resources::{MoveHistory, RotationQueue};
+use crate::rubik::resources::{MoveHistory, RotationQueue, RubikSize};
+use crate::rubik::systems::creation::GAP;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+#[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
 pub fn handle_mouse_input(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut drag_state: ResMut<DragState>,
@@ -12,6 +14,7 @@ pub fn handle_mouse_input(
     camera_query: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     cubie_faces: Query<(Entity, &CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
+    rubik_size: Res<RubikSize>,
 ) {
     let window = *window_query;
     let (camera, camera_transform) = *camera_query;
@@ -104,18 +107,29 @@ pub fn handle_mouse_input(
                                 .affine()
                                 .inverse()
                                 .transform_point3(cubie_pos);
+                            let size = rubik_size.size;
+                            let scale = 3.0 / size as f32;
+                            let current_gap = GAP * scale;
+                            let offset = (size as f32 - 1.0) / 2.0;
                             match best_axis {
-                                RotationAxis::X => local_pos.x.round() as i32,
-                                RotationAxis::Y => local_pos.y.round() as i32,
-                                RotationAxis::Z => local_pos.z.round() as i32,
+                                RotationAxis::X => {
+                                    ((local_pos.x / current_gap) + offset).round() as i32
+                                }
+                                RotationAxis::Y => {
+                                    ((local_pos.y / current_gap) + offset).round() as i32
+                                }
+                                RotationAxis::Z => {
+                                    ((local_pos.z / current_gap) + offset).round() as i32
+                                }
                             }
                         } else {
                             0
                         }
                     };
 
-                    // Block center layer rotations (index 0) from mouse interaction
-                    if index != 0 {
+                    // Block center layer rotations from mouse interaction
+                    let size = rubik_size.size;
+                    if size % 2 == 0 || index != size / 2 {
                         rotation_queue.0.push_back(RotationMove {
                             axis: best_axis,
                             index,

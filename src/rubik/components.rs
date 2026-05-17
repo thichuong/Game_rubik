@@ -12,16 +12,20 @@ pub struct Cubie;
 #[derive(Component)]
 pub struct Pivot;
 
-/// Logical coordinates of a cubie in the 3x3x3 grid (-1 to 1)
+/// Logical coordinates of a cubie in the `NxNxN` grid (0 to size - 1)
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridCoord(pub IVec3);
 
 impl GridCoord {
     /// Update the logical coordinate based on a 90-degree rotation
-    pub fn rotate(&mut self, axis: Vec3, angle: f32) {
+    #[allow(clippy::cast_precision_loss)]
+    pub fn rotate(&mut self, axis: Vec3, angle: f32, size: i32) {
+        let offset = (size as f32 - 1.0) / 2.0;
         let rotation = Quat::from_axis_angle(axis, angle);
-        let rotated = rotation * self.0.as_vec3();
-        self.0 = rotated.round().as_ivec3();
+        let centered = self.0.as_vec3() - Vec3::splat(offset);
+        let rotated = rotation * centered;
+        let restored = rotated + Vec3::splat(offset);
+        self.0 = restored.round().as_ivec3();
     }
 }
 

@@ -1,6 +1,6 @@
 use super::creation::GAP;
 use crate::rubik::components::{Cubie, GridCoord, Pivot, RotationMove, RubikCube, TargetRotation};
-use crate::rubik::resources::{CurrentlyRotating, MoveHistory, RotationQueue};
+use crate::rubik::resources::{CurrentlyRotating, MoveHistory, RotationQueue, RubikSize};
 use bevy::prelude::*;
 
 pub fn handle_rotation_queue(
@@ -9,6 +9,7 @@ pub fn handle_rotation_queue(
     current: Option<Res<CurrentlyRotating>>,
     cubies: Query<(Entity, &GridCoord), With<Cubie>>,
     cube_root: Single<Entity, With<RubikCube>>,
+    rubik_size: Res<RubikSize>,
 ) {
     if current.is_some() {
         return;
@@ -16,8 +17,9 @@ pub fn handle_rotation_queue(
     let root_entity = *cube_root;
 
     while let Some(rotation_move) = queue.0.pop_front() {
-        // Enforce blocking of center slice rotations (index 0) in core logic
-        if rotation_move.index == 0 {
+        // Enforce blocking of center slice rotations in core logic
+        let size = rubik_size.size;
+        if size % 2 != 0 && rotation_move.index == size / 2 {
             continue;
         }
 
@@ -60,6 +62,7 @@ pub fn handle_rotation_queue(
 pub type CubieQuery<'w, 's> =
     Query<'w, 's, (&'static mut Transform, &'static mut GridCoord), (With<Cubie>, Without<Pivot>)>;
 
+#[allow(clippy::cast_precision_loss)]
 pub fn animate_rotation(
     mut commands: Commands,
     time: Res<Time>,
@@ -68,6 +71,7 @@ pub fn animate_rotation(
     mut cubie_query: CubieQuery,
     cube_root: Single<Entity, With<RubikCube>>,
     mut history: ResMut<MoveHistory>,
+    rubik_size: Res<RubikSize>,
 ) {
     let Some(mut current) = current else { return };
     let (pivot_entity, mut pivot_transform, target) = pivot_query.into_inner();
@@ -80,10 +84,15 @@ pub fn animate_rotation(
     pivot_transform.rotation = Quat::IDENTITY.slerp(target.0, eased_progress);
 
     if current.timer.is_finished() {
+        let size = rubik_size.size;
+        let offset = (size as f32 - 1.0) / 2.0;
+        let scale = 3.0 / size as f32;
+        let current_gap = GAP * scale;
         for &cubie_entity in &current.cubies {
             if let Ok((mut transform, mut coord)) = cubie_query.get_mut(cubie_entity) {
-                coord.rotate(current.rotation_axis, current.angle);
-                transform.translation = coord.0.as_vec3() * GAP;
+                coord.rotate(current.rotation_axis, current.angle, size);
+                transform.translation = (coord.0.as_vec3() - Vec3::splat(offset)) * current_gap;
+                transform.scale = Vec3::splat(scale);
 
                 let rot_step = Quat::from_axis_angle(current.rotation_axis, current.angle);
                 transform.rotation = (rot_step * transform.rotation).normalize();

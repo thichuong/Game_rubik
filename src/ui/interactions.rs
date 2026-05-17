@@ -1,14 +1,17 @@
 use crate::environment::resources::EnvironmentSettings;
 use crate::events::ResetCameraEvent;
 use crate::rubik::components::{CubieFace, Direction, RotationAxis, RotationMove, RubikCube};
-use crate::rubik::resources::{RotationQueue, RubikSkin};
+use crate::rubik::resources::{RotationQueue, RubikSize, RubikSkin};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
 use crate::ui::components::{
-    CloseButton, EnvControl, EnvList, EnvToggleButton, NextStepButton, ShuffleButton, SkinButton,
-    SkinList, SkinToggleButton, SolutionPanel, SolveButton, StepText,
+    CloseButton, EnvControl, EnvList, EnvToggleButton, NextStepButton, ShuffleButton,
+    SizeDecrementButton, SizeIncrementButton, SizeSliderFill, SizeSliderHandle, SizeSliderTrack,
+    SizeText, SkinButton, SkinList, SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText,
+    StepText,
 };
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use rand::RngExt;
 use std::fmt::Write;
 
@@ -26,6 +29,7 @@ pub type InteractionQuery<'w, 's, T> = Query<
 pub fn handle_shuffle_button(
     mut interaction_query: InteractionQuery<ShuffleButton>,
     mut rotation_queue: ResMut<RotationQueue>,
+    rubik_size: Res<RubikSize>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -34,13 +38,22 @@ pub fn handle_shuffle_button(
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.5, 0.6, 0.9, 1.0)));
 
                 let mut rng = rand::rng();
+                let size = rubik_size.size;
                 for _ in 0..20 {
                     let axis = match rng.random_range(0..3) {
                         0 => RotationAxis::X,
                         1 => RotationAxis::Y,
                         _ => RotationAxis::Z,
                     };
-                    let index = if rng.random_bool(0.5) { -1 } else { 1 };
+
+                    // Generate a random slice index between 0 and size-1, avoiding the center slice for odd sizes
+                    let mut index = rng.random_range(0..size);
+                    if size % 2 != 0 {
+                        while index == size / 2 {
+                            index = rng.random_range(0..size);
+                        }
+                    }
+
                     let direction = if rng.random_bool(0.5) {
                         Direction::Clockwise
                     } else {
@@ -74,11 +87,17 @@ pub fn handle_solve_button(
     faces: Query<(&CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     solver_res: Res<SolverResource>,
+    rubik_size: Res<RubikSize>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
-                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.5, 0.35, 1.0)));
+                // Solver only supports 3x3x3 Rubik's cube, so prevent action on other sizes
+                if rubik_size.size != 3 {
+                    return;
+                }
+
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.35, 0.5, 1.0)));
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.4, 0.9, 0.6, 1.0)));
 
                 reset_camera.write(ResetCameraEvent);
@@ -324,6 +343,102 @@ pub fn handle_env_controls(
                 }
             }
             *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.4, 0.4, 0.5, 1.0)));
+        }
+    }
+}
+
+/// System to handle changes in the Rubik size via the Slider Track
+#[allow(clippy::cast_possible_truncation)]
+pub fn handle_size_slider_track(
+    mut rubik_size: ResMut<RubikSize>,
+    window_query: Single<&Window, With<PrimaryWindow>>,
+    track_query: Single<(&Interaction, &GlobalTransform, &ComputedNode), With<SizeSliderTrack>>,
+) {
+    let (interaction, transform, computed_node): (&Interaction, &GlobalTransform, &ComputedNode) =
+        *track_query;
+
+    if matches!(*interaction, Interaction::Pressed) {
+        let window = *window_query;
+        let Some(cursor_pos) = window.cursor_position() else {
+            return;
+        };
+
+        let width = computed_node.size().x;
+        // GlobalTransform translation gives the center of the UI element
+        let center_x = transform.translation().x;
+        let left_x = center_x - width / 2.0;
+
+        // Calculate click percentage and map to size 2 to 12
+        let pct = ((cursor_pos.x - left_x) / width).clamp(0.0, 1.0);
+        let new_size = 2 + (pct * 10.0).round() as i32;
+
+        if rubik_size.size != new_size {
+            rubik_size.size = new_size;
+        }
+    }
+}
+
+/// System to handle fast decrement button (-) for cube size
+pub fn handle_size_decrement_button(
+    mut interaction_query: Query<&Interaction, (Changed<Interaction>, With<SizeDecrementButton>)>,
+    mut rubik_size: ResMut<RubikSize>,
+) {
+    for interaction in &mut interaction_query {
+        if matches!(*interaction, Interaction::Pressed) && rubik_size.size > 2 {
+            rubik_size.size -= 1;
+        }
+    }
+}
+
+/// System to handle fast increment button (+) for cube size
+pub fn handle_size_increment_button(
+    mut interaction_query: Query<&Interaction, (Changed<Interaction>, With<SizeIncrementButton>)>,
+    mut rubik_size: ResMut<RubikSize>,
+) {
+    for interaction in &mut interaction_query {
+        if matches!(*interaction, Interaction::Pressed) && rubik_size.size < 12 {
+            rubik_size.size += 1;
+        }
+    }
+}
+
+/// System to update the visual representation of the Slider (fill width & handle position)
+#[allow(clippy::cast_precision_loss)]
+pub fn update_size_slider_ui(
+    rubik_size: Res<RubikSize>,
+    mut size_text_query: Single<&mut Text, With<SizeText>>,
+    mut fill_query: Single<&mut Node, (With<SizeSliderFill>, Without<SizeSliderHandle>)>,
+    mut handle_query: Single<&mut Node, (With<SizeSliderHandle>, Without<SizeSliderFill>)>,
+) {
+    if rubik_size.is_changed() {
+        let size = rubik_size.size;
+        size_text_query.0 = format!("{size}x{size}x{size}");
+
+        // Map size 2..=12 to 0%..=100% progress
+        let pct = (size - 2) as f32 / 10.0 * 100.0;
+        fill_query.width = Val::Percent(pct);
+        handle_query.left = Val::Percent(pct);
+    }
+}
+
+/// System to dynamically enable/disable the Solve Button state (gray out if size is not 3x3x3)
+pub fn update_solve_button_state(
+    rubik_size: Res<RubikSize>,
+    solve_btn_query: Single<(&mut BackgroundColor, &mut BorderColor), With<SolveButton>>,
+    mut text_query: Single<&mut Text, With<SolveButtonText>>,
+) {
+    if rubik_size.is_changed() {
+        let (mut bg, mut border) = solve_btn_query.into_inner();
+        if rubik_size.size == 3 {
+            // Restore beautiful green theme for 3x3x3 active solver
+            *bg = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.85)));
+            *border = BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6)));
+            text_query.0 = "SOLVE".to_string();
+        } else {
+            // Cool elegant dark gray theme indicating disabled solver state
+            *bg = BackgroundColor(Color::Srgba(Srgba::new(0.08, 0.08, 0.1, 0.4)));
+            *border = BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.15, 0.2, 0.2)));
+            text_query.0 = "SOLVE (3x3)".to_string();
         }
     }
 }

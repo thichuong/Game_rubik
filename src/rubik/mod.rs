@@ -3,7 +3,7 @@ pub mod resources;
 pub mod systems;
 
 use bevy::prelude::*;
-use resources::{MoveHistory, RotationQueue, RubikSkin};
+use resources::{MoveHistory, RotationQueue, RubikSize, RubikSkin};
 
 pub struct RubikPlugin;
 
@@ -12,6 +12,7 @@ impl Plugin for RubikPlugin {
         app.init_resource::<RotationQueue>()
             .init_resource::<MoveHistory>()
             .init_resource::<RubikSkin>()
+            .init_resource::<RubikSize>()
             .add_systems(
                 Startup,
                 (systems::setup_materials, systems::spawn_rubik_cube).chain(),
@@ -19,6 +20,7 @@ impl Plugin for RubikPlugin {
             .add_systems(
                 Update,
                 (
+                    systems::handle_rubik_resize,
                     systems::handle_rotation_queue,
                     systems::animate_rotation,
                     systems::update_rubik_rotation,

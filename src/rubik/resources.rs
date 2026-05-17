@@ -52,3 +52,15 @@ pub struct CurrentlyRotating {
     pub cubies: Vec<Entity>,
     pub add_to_history: bool,
 }
+
+/// Resource to hold the current size of the Rubik's cube (`NxNxN`)
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RubikSize {
+    pub size: i32,
+}
+
+impl Default for RubikSize {
+    fn default() -> Self {
+        Self { size: 3 }
+    }
+}

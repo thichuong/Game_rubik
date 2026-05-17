@@ -8,7 +8,9 @@ use bevy::prelude::*;
 
 pub use environment::spawn_environment_section;
 pub use hud::spawn_solution_hud;
-pub use sidebar::{spawn_controls, spawn_divider, spawn_header, spawn_skins_section};
+pub use sidebar::{
+    spawn_controls, spawn_divider, spawn_header, spawn_size_section, spawn_skins_section,
+};
 
 /// Set up the UI with a premium layout divided into helper functions.
 pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -41,6 +43,12 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         .with_children(|parent: &mut ChildSpawnerCommands| {
             // Header
             spawn_header(parent, &font);
+
+            // Divider
+            spawn_divider(parent);
+
+            // Cube Size Section
+            spawn_size_section(parent, &font);
 
             // Divider
             spawn_divider(parent);

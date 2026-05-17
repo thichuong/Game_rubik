@@ -41,3 +41,24 @@ pub enum EnvControl {
     Angle(f32),     // Increment/Decrement in radians
     Bg(Color),      // Preset backgrounds
 }
+
+#[derive(Component)]
+pub struct SizeSliderTrack;
+
+#[derive(Component)]
+pub struct SizeSliderHandle;
+
+#[derive(Component)]
+pub struct SizeSliderFill;
+
+#[derive(Component)]
+pub struct SizeDecrementButton;
+
+#[derive(Component)]
+pub struct SizeIncrementButton;
+
+#[derive(Component)]
+pub struct SizeText;
+
+#[derive(Component)]
+pub struct SolveButtonText;

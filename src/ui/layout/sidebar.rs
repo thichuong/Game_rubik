@@ -1,5 +1,9 @@
 use crate::rubik::resources::SkinType;
-use crate::ui::components::{ShuffleButton, SkinButton, SkinList, SkinToggleButton, SolveButton};
+use crate::ui::components::{
+    ShuffleButton, SizeDecrementButton, SizeIncrementButton, SizeSliderFill, SizeSliderHandle,
+    SizeSliderTrack, SizeText, SkinButton, SkinList, SkinToggleButton, SolveButton,
+    SolveButtonText,
+};
 use bevy::ecs::prelude::ChildSpawnerCommands;
 use bevy::prelude::*;
 use bevy_resvg::prelude::*;
@@ -133,6 +137,7 @@ pub fn spawn_controls(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
                                 ..default()
                             },
                             TextColor(Color::Srgba(Srgba::WHITE)),
+                            SolveButtonText,
                         ));
                     });
             });
@@ -242,6 +247,159 @@ pub fn spawn_skins_section(
                             ));
                         });
                 }
+            });
+        });
+}
+
+/// Helper function to spawn Cube Size controller (with premium slider and - / + buttons)
+#[allow(clippy::too_many_lines)]
+pub fn spawn_size_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    parent
+        .spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(8.0),
+            ..default()
+        })
+        .with_children(|p: &mut ChildSpawnerCommands| {
+            // Label displaying current Rubik size
+            p.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|header: &mut ChildSpawnerCommands| {
+                header.spawn((
+                    Text::new("CUBE SIZE"),
+                    TextFont {
+                        font_size: 12.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::new(0.6, 0.6, 0.7, 1.0))),
+                ));
+                header.spawn((
+                    Text::new("3x3x3"),
+                    TextFont {
+                        font_size: 13.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::new(0.4, 0.7, 1.0, 1.0))),
+                    SizeText,
+                ));
+            });
+
+            // Slider control container (Layout: [ - ]  ====O====  [ + ])
+            p.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(12.0),
+                width: Val::Percent(100.0),
+                height: Val::Px(36.0),
+                ..default()
+            })
+            .with_children(|row: &mut ChildSpawnerCommands| {
+                // Decrement button
+                row.spawn(Button)
+                    .insert(Node {
+                        width: Val::Px(32.0),
+                        height: Val::Px(32.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                        ..default()
+                    })
+                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                        0.12, 0.12, 0.18, 0.8,
+                    ))))
+                    .insert(SizeDecrementButton)
+                    .with_children(|btn: &mut ChildSpawnerCommands| {
+                        btn.spawn((
+                            Text::new("-"),
+                            TextFont {
+                                font_size: 18.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::Srgba(Srgba::WHITE)),
+                        ));
+                    });
+
+                // Slider Track
+                row.spawn(Button) // Using Button to capture Interaction events easily
+                    .insert(Node {
+                        flex_grow: 1.0,
+                        height: Val::Px(8.0),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                        0.08, 0.08, 0.12, 1.0,
+                    ))))
+                    .insert(SizeSliderTrack)
+                    .with_children(|track: &mut ChildSpawnerCommands| {
+                        // Slider Fill (visual indicator of progress)
+                        track.spawn((
+                            Node {
+                                width: Val::Percent(10.0), // Updated by system based on size (3/12 => ~10%)
+                                height: Val::Percent(100.0),
+                                border_radius: BorderRadius::new(
+                                    Val::Px(4.0),
+                                    Val::Px(0.0),
+                                    Val::Px(0.0),
+                                    Val::Px(4.0),
+                                ),
+                                ..default()
+                            },
+                            BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.5, 0.9, 0.85))),
+                            SizeSliderFill,
+                        ));
+
+                        // Slider Handle (thumb indicator)
+                        track.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(10.0), // Updated by system
+                                width: Val::Px(16.0),
+                                height: Val::Px(16.0),
+                                border_radius: BorderRadius::all(Val::Px(8.0)),
+                                margin: UiRect::left(Val::Px(-8.0)), // Offset to center thumb
+                                ..default()
+                            },
+                            BackgroundColor(Color::Srgba(Srgba::WHITE)),
+                            BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.45, 0.85, 1.0))),
+                            SizeSliderHandle,
+                        ));
+                    });
+
+                // Increment button
+                row.spawn(Button)
+                    .insert(Node {
+                        width: Val::Px(32.0),
+                        height: Val::Px(32.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                        ..default()
+                    })
+                    .insert(BackgroundColor(Color::Srgba(Srgba::new(
+                        0.12, 0.12, 0.18, 0.8,
+                    ))))
+                    .insert(SizeIncrementButton)
+                    .with_children(|btn: &mut ChildSpawnerCommands| {
+                        btn.spawn((
+                            Text::new("+"),
+                            TextFont {
+                                font_size: 18.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::Srgba(Srgba::WHITE)),
+                        ));
+                    });
             });
         });
 }
