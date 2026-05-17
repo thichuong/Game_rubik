@@ -8,13 +8,13 @@ pub fn handle_mouse_input(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut drag_state: ResMut<DragState>,
     mut rotation_queue: ResMut<RotationQueue>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    window_query: Single<&Window, With<PrimaryWindow>>,
+    camera_query: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     cubie_faces: Query<(Entity, &CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
 ) {
-    let window = window_query.single().expect("No primary window");
-    let (camera, camera_transform) = camera_query.single().expect("No camera");
+    let window = *window_query;
+    let (camera, camera_transform) = *camera_query;
 
     let Some(cursor_pos) = window.cursor_position() else {
         return;
