@@ -6,9 +6,10 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 
 ## ✨ Key Features
 
-- **🎮 Highly Interactive 3D Controls**:
+- **🎮 Highly Interactive Controls**:
   - Smooth **Orbit Camera** with right-click drag navigation.
   - Precise mouse **Raycast Pick & Slice Rotation** (left-click and drag to rotate the exact slice you touch).
+  - **✨ NEW: Real-Time Hand Tracking**: Control the entire Rubik's cube rotation just by waving your hand in front of your webcam! Powered by OpenCV native Rust bindings.
 - **🧠 Intelligent Automated Solver**:
   - Integrated Kociemba's two-phase solver via the `kewb` library.
   - Full support for **Step-by-Step guided solving** with a modern overlay panel showing moves like `U`, `R'`, `F2`.
@@ -36,6 +37,7 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 | Action | Control | Description |
 |:---|:---|:---|
 | **Rotate Camera** | `Right-Click` + `Drag` | Orbit the camera around the Rubik's Cube. |
+| **Hand Tracking** | `Camera Toggle` UI | Turn on the camera feed and rotate the entire cube by moving your hand left/right/up/down in front of your webcam. |
 | **Zoom Camera** | `Scroll Wheel` | Zoom in and out on the cube. |
 | **Reset Camera** | `Reset View Button` | Snaps the camera back to the default 45-degree angle. |
 | **Rotate Rubik Slice**| `Left-Click` + `Drag` | Click on any cubelet face and drag in the desired direction to rotate that slice. |
@@ -52,6 +54,14 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 ### Prerequisites
 
 Ensure you have the Rust toolchain installed. If not, get it from [rustup.rs](https://rustup.rs/).
+
+**OpenCV Dependencies (Linux):**
+The camera tracking feature requires OpenCV development libraries and Clang.
+```bash
+sudo dnf install opencv opencv-devel clang clang-devel # Fedora
+# OR
+sudo apt install libopencv-dev clang libclang-dev      # Ubuntu/Debian
+```
 
 ```bash
 # Clone the repository (if applicable)
@@ -77,14 +87,15 @@ Game_rubik/
 ├── assets/                  # 3D Textures, Fonts, and UI SVG Icons
 │   ├── fonts/               # UI fonts
 │   └── textures/            # Skins and SVG/PNG UI icons
+├── hand_tracker/            # OpenCV native Rust workspace library for camera hand motion detection
 ├── src/                     # Rust Source Code (ECS Modules)
 │   ├── camera/              # Orbit camera components and rotation systems
 │   ├── environment/         # Studio lights, shadow cast floor, environmental adjustments
-│   ├── input/               # Raycasting mouse interactions, slice selection & dragging
+│   ├── input/               # Raycasting mouse interactions, slice selection & dragging, hand_tracking receiver
 │   ├── rubik/               # Rubik cube spawn logic, material/skin application, rotation animations
 │   ├── solver/              # State mapping to facelet notation & kewb solver interface
-│   ├── ui/                  # Advanced Bevy UI buttons, panels, dropdowns and settings
-│   ├── events.rs            # Custom ECS event messages (ResetCameraEvent, SolveByStepsEvent)
+│   ├── ui/                  # Advanced Bevy UI buttons, camera feed panel, dropdowns and settings
+│   ├── events.rs            # Custom ECS event messages (CameraFrameEvent, HandRotationEvent, etc.)
 │   └── main.rs              # Application initialization and plugin assembly
 ├── Cargo.toml               # Cargo package configuration and Bevy 0.18 dependencies
 └── architecture.md          # In-depth architectural details

@@ -24,7 +24,7 @@ struct HandTrackingReceiver(Mutex<Receiver<hand_tracker::TrackerData>>);
 
 fn setup_camera_listener(mut commands: Commands) {
     let (tx, rx) = mpsc::channel();
-    
+
     thread::spawn(move || {
         let mut tracker = match hand_tracker::HandTracker::new() {
             Ok(t) => t,
@@ -33,7 +33,7 @@ fn setup_camera_listener(mut commands: Commands) {
                 return;
             }
         };
-        
+
         loop {
             if let Ok(Some(data)) = tracker.get_delta() {
                 let _ = tx.send(data);
@@ -61,7 +61,7 @@ fn receive_hand_tracking(
                     width: data.width,
                     height: data.height,
                 });
-                
+
                 // Only send rotation events if the tracking is enabled
                 if enabled.0 {
                     if let Some((dx, dy)) = data.delta {

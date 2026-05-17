@@ -14,8 +14,8 @@ use crate::ui::components::{
     SolveButtonText, StepText,
 };
 use bevy::asset::RenderAssetUsages;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
 use rand::RngExt;
 use std::fmt::Write;
@@ -876,11 +876,15 @@ pub fn handle_sidebar_scrollbar_drag(
     }
 }
 
+pub type CameraToggleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor, &'static mut BorderColor),
+    (Changed<Interaction>, With<CameraTrackingButton>),
+>;
+
 pub fn handle_camera_toggle(
-    mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<CameraTrackingButton>),
-    >,
+    mut interaction_query: CameraToggleQuery,
     mut text_query: Single<&mut Text, With<CameraTrackingText>>,
     mut image_node: Option<Single<&mut Node, With<CameraFeedImage>>>,
     mut enabled: ResMut<HandTrackingEnabled>,
@@ -938,7 +942,7 @@ pub fn update_camera_feed(
                 TextureFormat::Rgba8UnormSrgb,
                 RenderAssetUsages::RENDER_WORLD,
             );
-            
+
             let handle = images.add(image);
             img_node.image = handle;
         }

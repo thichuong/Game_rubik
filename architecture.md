@@ -40,6 +40,12 @@ graph TD
         Orbit["OrbitCamera Component"]
     end
 
+    subgraph HandTracking ["✋ Hand Tracking (OpenCV)"]
+        HandTrackerLib["hand_tracker (Native Rust OpenCV)"]
+        HandTrackingPlugin["HandTrackingPlugin"]
+        TrackerData["CameraFrameEvent & HandRotationEvent"]
+    end
+
     subgraph Environment ["☀️ Environment Module"]
         EnvPlugin["EnvironmentPlugin"]
         Settings["EnvironmentSettings Resource"]
@@ -75,6 +81,10 @@ graph TD
     
     CameraPlugin -.->|Orbit Reference| InputPlugin
     CameraPlugin -.->|Rig Rotation Target| EnvPlugin
+    
+    HandTrackerLib -->|Provides frame & delta| HandTrackingPlugin
+    HandTrackingPlugin -->|Triggers| RotQueue
+    HandTrackingPlugin -->|Sends UI Frames| UiPlugin
 ```
 
 ---
@@ -107,6 +117,7 @@ The core design patterns of this application are represented cleanly in its comp
 | `EnvironmentSettings` | Real-time settings matching sliders (clear color, light intensities, warm/cool temperature). | `environment::resources` |
 | `RubikSize` | Active dimension size of the Rubik's Cube (ranging from 2x2x2 up to 11x11x11, etc.). | `rubik::resources` |
 | `StepByStepSolution` | Current step index and calculated move strings generated from the automated solver. | `solver::resources` |
+| `HandTrackingEnabled` | Boolean toggle state for whether camera hand gestures should rotate the cube. | `input::hand_tracking` |
 
 ---
 
@@ -131,7 +142,7 @@ Manages structural rendering, mesh hierarchy, animation updates, and logical spa
     4.  Once the animation finishes, the new positions and orientations are calculated, the cubies are reparented back to the root, and the `Pivot` is despawned.
 
 ### 2. Input & Picking Module (`src/input`)
-Handles standard mouse clicking, camera control interception, and dragging gestures.
+Handles standard mouse clicking, camera control interception, dragging gestures, and **Camera Hand Tracking**.
 *   **Manual Raycasting**: Decoupled from massive heavy picking libraries, the system manually translates the viewport cursor screen coordinates into a world-space ray utilizing Bevy's camera transform (`viewport_to_world`).
 *   **Plane Intersection**:
     *   Iterates through face entities, performing plane intersection.
@@ -139,6 +150,12 @@ Handles standard mouse clicking, camera control interception, and dragging gestu
     *   Stores hit coordinates on mouse drag initialization (`DragState`).
 *   **Drag Vector Calculation**: On cursor release, projects the current cursor ray onto the plane of the initially clicked face. The resulting swipe vector dictates the orientation cross-product to determine which 3D axis is rotated.
 *   **Center Protection constraint**: Rotations with `index == 0` (center slices) are explicitly blocked from mouse interaction to prevent axis-shifting disorientation, keeping controls extremely intuitive.
+*   **Camera Hand Tracking (`hand_tracker` & `hand_tracking.rs`)**:
+    *   Utilizes a dedicated workspace crate (`hand_tracker`) powered by `opencv` (Rust bindings) to read real-time webcam frames.
+    *   Applies Grayscale, Gaussian Blur, Frame Differencing, and Contour Area moments to calculate the centroid of the hand movement.
+    *   Runs seamlessly on a separate background thread communicating via `std::sync::mpsc::channel`.
+    *   Pushes `HandRotationEvent` mapping 2D hand movement deltas to 3D cube rotations.
+    *   Pushes `CameraFrameEvent` carrying RGBA byte arrays to update the UI Camera view dynamically without blocking the main render loop.
 
 ### 3. Solver Module (`src/solver`)
 Bridges the physical 3D scene representation to the abstract mathematical two-phase algorithm.
