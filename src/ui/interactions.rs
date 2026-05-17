@@ -32,6 +32,7 @@ pub fn handle_shuffle_button(
     rubik_size: Res<RubikSize>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
+        info!("Shuffle button interaction: {:?}", *interaction);
         match *interaction {
             Interaction::Pressed => {
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.3, 0.55, 1.0)));
@@ -376,27 +377,56 @@ pub fn handle_env_controls(
 pub fn handle_size_slider_track(
     mut rubik_size: ResMut<RubikSize>,
     window_query: Single<&Window, With<PrimaryWindow>>,
-    track_query: Single<(&Interaction, &GlobalTransform, &ComputedNode), With<SizeSliderTrack>>,
+    track_query: Query<
+        (&Interaction, &bevy::ui::UiGlobalTransform, &ComputedNode),
+        With<SizeSliderTrack>,
+    >,
+    mut is_dragging: Local<bool>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
 ) {
-    let (interaction, transform, computed_node): (&Interaction, &GlobalTransform, &ComputedNode) =
-        *track_query;
+    let Some((track_interaction, transform, computed_node)) = track_query.iter().next() else {
+        // info!("Track query is empty!"); // We won't spam this every frame if it's empty, but we can print once.
+        return;
+    };
 
-    if matches!(*interaction, Interaction::Pressed) {
+    if matches!(*track_interaction, Interaction::Hovered) {
+        info!("Track hovered!");
+    }
+
+    if matches!(*track_interaction, Interaction::Pressed) {
+        if !*is_dragging {
+            info!("Slider drag started");
+        }
+        *is_dragging = true;
+    }
+
+    if mouse_input.just_released(MouseButton::Left) {
+        if *is_dragging {
+            info!("Slider drag stopped");
+        }
+        *is_dragging = false;
+    }
+
+    if *is_dragging {
         let window = *window_query;
         let Some(cursor_pos) = window.cursor_position() else {
             return;
         };
 
         let width = computed_node.size().x;
-        // GlobalTransform translation gives the center of the UI element
-        let center_x = transform.translation().x;
+        let center_x = transform.translation.x;
         let left_x = center_x - width / 2.0;
 
-        // Calculate click percentage and map to size 2 to 12
         let pct = ((cursor_pos.x - left_x) / width).clamp(0.0, 1.0);
         let new_size = 2 + (pct * 10.0).round() as i32;
 
+        info!(
+            "Dragging! Cursor: {:.2}, CenterX: {:.2}, Width: {:.2}, Pct: {:.2}, NewSize: {}",
+            cursor_pos.x, center_x, width, pct, new_size
+        );
+
         if rubik_size.size != new_size {
+            info!("Updating Rubik size to: {}", new_size);
             rubik_size.size = new_size;
         }
     }
@@ -410,6 +440,41 @@ pub fn handle_size_decrement_button(
     for interaction in &mut interaction_query {
         if matches!(*interaction, Interaction::Pressed) && rubik_size.size > 2 {
             rubik_size.size -= 1;
+        }
+    }
+}
+
+#[allow(clippy::type_complexity, clippy::useless_let_if_seq)]
+pub fn debug_all_interactions(
+    query: Query<
+        (
+            Entity,
+            &Interaction,
+            Option<&SizeSliderTrack>,
+            Option<&SizeSliderHandle>,
+            Option<&GlobalTransform>,
+            Option<&ComputedNode>,
+        ),
+        Changed<Interaction>,
+    >,
+) {
+    for (entity, interaction, track, handle, gt, cn) in query.iter() {
+        if *interaction != Interaction::None {
+            let mut name = "Unknown";
+            if track.is_some() {
+                name = "SizeSliderTrack";
+            }
+            if handle.is_some() {
+                name = "SizeSliderHandle";
+            }
+            info!(
+                "Entity {:?} ({}) interaction changed to {:?} (Has GT: {}, Has CN: {})",
+                entity,
+                name,
+                interaction,
+                gt.is_some(),
+                cn.is_some()
+            );
         }
     }
 }

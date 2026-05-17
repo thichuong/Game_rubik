@@ -318,52 +318,75 @@ pub fn spawn_size_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>
                     ));
                 });
 
-                // Slider Track
-                row.spawn((
-                    Button, // Using Button to capture Interaction events easily
-                    Node {
-                        flex_grow: 1.0,
-                        height: Val::Px(8.0),
-                        border_radius: BorderRadius::all(Val::Px(4.0)),
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::Srgba(Srgba::new(0.08, 0.08, 0.12, 1.0))),
-                    SizeSliderTrack,
-                ))
-                .with_children(|track: &mut ChildSpawnerCommands| {
-                    // Slider Fill (visual indicator of progress)
-                    track.spawn((
+                // Slider Container (Holds visuals and the invisible hit box)
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    height: Val::Px(30.0), // Large hit box container
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|container: &mut ChildSpawnerCommands| {
+                    // 1. Visual Track (Bottom layer)
+                    container.spawn((
                         Node {
-                            width: Val::Percent(10.0), // Updated by system based on size (3/12 => ~10%)
-                            height: Val::Percent(100.0),
+                            width: Val::Percent(100.0),
+                            height: Val::Px(8.0),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(11.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::Srgba(Srgba::new(0.08, 0.08, 0.12, 1.0))),
+                    ));
+
+                    // 2. Slider Fill (Middle layer)
+                    container.spawn((
+                        Node {
+                            width: Val::Percent(10.0), // Updated by system
+                            height: Val::Px(8.0),
                             border_radius: BorderRadius::new(
                                 Val::Px(4.0),
                                 Val::Px(0.0),
                                 Val::Px(0.0),
                                 Val::Px(4.0),
                             ),
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(11.0),
                             ..default()
                         },
                         BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.5, 0.9, 0.85))),
                         SizeSliderFill,
                     ));
 
-                    // Slider Handle (thumb indicator)
-                    track.spawn((
+                    // 3. Slider Handle (Top visual layer)
+                    container.spawn((
                         Node {
                             position_type: PositionType::Absolute,
+                            top: Val::Px(5.0),
                             left: Val::Percent(10.0), // Updated by system
-                            width: Val::Px(16.0),
-                            height: Val::Px(16.0),
-                            border_radius: BorderRadius::all(Val::Px(8.0)),
-                            margin: UiRect::left(Val::Px(-8.0)), // Offset to center thumb
+                            width: Val::Px(20.0),
+                            height: Val::Px(20.0),
+                            border_radius: BorderRadius::all(Val::Px(10.0)),
+                            margin: UiRect::left(Val::Px(-10.0)), // Offset to center thumb
                             ..default()
                         },
                         BackgroundColor(Color::Srgba(Srgba::WHITE)),
                         BorderColor::all(Color::Srgba(Srgba::new(0.15, 0.45, 0.85, 1.0))),
                         SizeSliderHandle,
+                    ));
+
+                    // 4. INVISIBLE OVERLAY HIT BOX (Captures ALL clicks!)
+                    container.spawn((
+                        Button,
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        BackgroundColor(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.01))), // 1% opacity to ensure picking
+                        SizeSliderTrack, // The track system will query THIS!
                     ));
                 });
 
