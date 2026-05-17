@@ -130,3 +130,10 @@ impl RotationMove {
 /// Component attached to each colored face of a cubie
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CubieFace(pub Face);
+
+/// Component attached to the 3D voxel face labels to keep track of their target face and distance
+#[derive(Component, Debug, Clone, Copy)]
+pub struct FaceLabel3d {
+    pub face: Face,
+    pub dist: f32,
+}

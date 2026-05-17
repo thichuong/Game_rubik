@@ -1,6 +1,6 @@
 use crate::events::ResetCameraEvent;
 use crate::rubik::components::{
-    Cubie, CubieFace, Face, GridCoord, Pivot, RotationMove, RubikCube, TargetRotation,
+    Cubie, CubieFace, Face, FaceLabel3d, GridCoord, Pivot, RotationMove, RubikCube, TargetRotation,
 };
 use crate::rubik::resources::{
     CurrentlyRotating, MoveHistory, RotationQueue, RubikMaterials, RubikSkin, SkinType,
@@ -106,6 +106,7 @@ pub fn spawn_rubik_cube(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<RubikMaterials>,
+    mut standard_materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let cube_root = commands
         .spawn((
@@ -191,6 +192,235 @@ pub fn spawn_rubik_cube(
                 }
             }
         }
+    }
+
+    // Spawn elegant white axes lines and face label text (U, D, L, R, F, B) from the center of each face outwards
+    spawn_face_axes(
+        &mut commands,
+        cube_root,
+        &mut meshes,
+        &mut standard_materials,
+    );
+}
+
+/// Structure representing a segment of a 3D voxel-style letter
+struct VoxelBar {
+    offset: Vec3,
+    size: Vec3,
+}
+
+/// Define the 3D cuboid layout for each face label letter
+#[allow(clippy::too_many_lines)]
+fn get_voxel_bars(label: &str) -> Vec<VoxelBar> {
+    let t = 0.035; // Thickness of the bars
+    match label {
+        "U" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Right vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, -0.08, 0.0),
+                size: Vec3::new(0.18, t, t),
+            }, // Bottom horizontal
+        ],
+        "D" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.08, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Top horizontal
+            VoxelBar {
+                offset: Vec3::new(0.0, -0.08, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Bottom horizontal
+            VoxelBar {
+                offset: Vec3::new(0.065, 0.0, 0.0),
+                size: Vec3::new(t, 0.13, t),
+            }, // Right vertical
+        ],
+        "L" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, -0.08, 0.0),
+                size: Vec3::new(0.18, t, t),
+            }, // Bottom horizontal
+        ],
+        "R" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.08, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Top horizontal
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.0, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Middle horizontal
+            VoxelBar {
+                offset: Vec3::new(0.065, 0.04, 0.0),
+                size: Vec3::new(t, 0.08, t),
+            }, // Right vertical top
+            VoxelBar {
+                offset: Vec3::new(0.065, -0.04, 0.0),
+                size: Vec3::new(t, 0.08, t),
+            }, // Right vertical bottom
+        ],
+        "F" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.08, 0.0),
+                size: Vec3::new(0.18, t, t),
+            }, // Top horizontal
+            VoxelBar {
+                offset: Vec3::new(-0.01, 0.0, 0.0),
+                size: Vec3::new(0.12, t, t),
+            }, // Middle horizontal
+        ],
+        "B" => vec![
+            VoxelBar {
+                offset: Vec3::new(-0.08, 0.0, 0.0),
+                size: Vec3::new(t, 0.20, t),
+            }, // Left vertical
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.08, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Top horizontal
+            VoxelBar {
+                offset: Vec3::new(0.0, 0.0, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Middle horizontal
+            VoxelBar {
+                offset: Vec3::new(0.0, -0.08, 0.0),
+                size: Vec3::new(0.13, t, t),
+            }, // Bottom horizontal
+            VoxelBar {
+                offset: Vec3::new(0.065, 0.04, 0.0),
+                size: Vec3::new(t, 0.08, t),
+            }, // Right vertical top
+            VoxelBar {
+                offset: Vec3::new(0.065, -0.04, 0.0),
+                size: Vec3::new(t, 0.08, t),
+            }, // Right vertical bottom
+        ],
+        _ => vec![],
+    }
+}
+
+/// Spawn white lines and 3D voxel-style letter models for each face of the Rubik's cube
+fn spawn_face_axes(
+    commands: &mut Commands,
+    cube_root: Entity,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    standard_materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    let line_mesh = meshes.add(Cuboid::new(0.015, 0.015, 1.2));
+    let white_unlit = standard_materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        unlit: true,
+        ..default()
+    });
+
+    let faces_info = [
+        (Face::Up, "U"),
+        (Face::Down, "D"),
+        (Face::Left, "L"),
+        (Face::Right, "R"),
+        (Face::Front, "F"),
+        (Face::Back, "B"),
+    ];
+
+    let half_cube_size = 1.5 * GAP;
+    let line_length = 1.2;
+    let line_center_dist = half_cube_size + line_length / 2.0;
+    let label_dist = half_cube_size + line_length + 0.12;
+
+    for (face, label) in faces_info {
+        let normal = face.normal();
+
+        // Calculate the line transform
+        let line_translation = normal * line_center_dist;
+        let line_rotation = Quat::from_rotation_arc(Vec3::Z, normal);
+
+        let line_id = commands
+            .spawn((
+                Mesh3d(line_mesh.clone()),
+                MeshMaterial3d(white_unlit.clone()),
+                Transform::from_translation(line_translation).with_rotation(line_rotation),
+            ))
+            .id();
+
+        commands.entity(cube_root).add_child(line_id);
+
+        // Spawn a parent entity for the 3D voxel letter
+        // It is spawned independently in world space (not a child of cube_root)
+        // so that it can maintain its screen-aligned rotation (billboard)
+        // while updating its position relative to the Rubik's cube.
+        let label_parent_id = commands
+            .spawn((
+                Transform::IDENTITY,
+                Visibility::default(),
+                InheritedVisibility::default(),
+                FaceLabel3d {
+                    face,
+                    dist: label_dist,
+                },
+            ))
+            .id();
+
+        // Spawn each individual segment/bar of the 3D letter
+        let bars = get_voxel_bars(label);
+        for bar in bars {
+            let bar_mesh = meshes.add(Cuboid::new(bar.size.x, bar.size.y, bar.size.z));
+            let bar_id = commands
+                .spawn((
+                    Mesh3d(bar_mesh),
+                    MeshMaterial3d(white_unlit.clone()),
+                    Transform::from_translation(bar.offset),
+                ))
+                .id();
+
+            commands.entity(label_parent_id).add_child(bar_id);
+        }
+    }
+}
+
+/// System to update 3D face labels so that they move with the Rubik's cube but remain screen-aligned (billboarded)
+#[allow(clippy::type_complexity)]
+pub fn update_face_labels(
+    cube_query: Single<&Transform, (With<RubikCube>, Without<FaceLabel3d>, Without<Camera>)>,
+    camera_query: Single<&Transform, (With<Camera>, Without<RubikCube>, Without<FaceLabel3d>)>,
+    mut label_query: Query<(&mut Transform, &FaceLabel3d), (Without<RubikCube>, Without<Camera>)>,
+) {
+    let cube_transform = *cube_query;
+    let camera_transform = *camera_query;
+
+    for (mut label_transform, label_info) in &mut label_query {
+        let normal = label_info.face.normal();
+
+        // Calculate the world position of the label based on the Rubik's cube's transform
+        let local_pos = normal * label_info.dist;
+        let world_pos = cube_transform.rotation * local_pos + cube_transform.translation;
+
+        label_transform.translation = world_pos;
+
+        // Keep the labels screen-aligned (billboarded) by matching the camera's rotation
+        label_transform.rotation = camera_transform.rotation;
     }
 }
 

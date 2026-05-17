@@ -24,6 +24,7 @@ impl Plugin for RubikPlugin {
                     systems::update_rubik_rotation,
                     systems::handle_cube_reset,
                     systems::update_skins,
+                    systems::update_face_labels,
                 ),
             );
     }
