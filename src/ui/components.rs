@@ -99,3 +99,12 @@ pub struct SidebarScrollState {
     pub drag_start_cursor_y: f32,
     pub drag_start_scroll_y: f32,
 }
+
+#[derive(Component)]
+pub struct CameraTrackingButton;
+
+#[derive(Component)]
+pub struct CameraTrackingText;
+
+#[derive(Component)]
+pub struct CameraFeedImage;

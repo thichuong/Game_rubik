@@ -39,6 +39,8 @@ impl Plugin for UiPlugin {
                     interactions::handle_sidebar_scroll,
                     interactions::update_sidebar_scrollbar_visuals,
                     interactions::handle_sidebar_scrollbar_drag,
+                    interactions::handle_camera_toggle,
+                    interactions::update_camera_feed,
                 ),
             );
     }

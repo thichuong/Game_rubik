@@ -1,3 +1,4 @@
+pub mod hand_tracking;
 pub mod resources;
 pub mod systems;
 
@@ -12,5 +13,6 @@ impl Plugin for InputPlugin {
             Update,
             (systems::handle_mouse_input, systems::handle_keyboard_input),
         );
+        app.add_plugins(hand_tracking::HandTrackingPlugin);
     }
 }

@@ -1,0 +1,7 @@
+[package]
+name = "hand_tracker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+opencv = { version = "0.98.2" }

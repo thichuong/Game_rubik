@@ -1,16 +1,20 @@
 use crate::environment::resources::EnvironmentSettings;
-use crate::events::ResetCameraEvent;
+use crate::events::{CameraFrameEvent, ResetCameraEvent};
+use crate::input::hand_tracking::HandTrackingEnabled;
 use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove, RubikCube};
 use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikSize, RubikSkin};
 use crate::solver::helpers;
 use crate::solver::resources::{SolverResource, StepByStepSolution};
 use crate::ui::components::{
-    CloseButton, EnvControl, EnvList, EnvToggleButton, MappingControl, MappingList,
-    MappingOrderText, MappingToggleButton, NextStepButton, ScrollContentWrapper, ShuffleButton,
-    SidebarScrollHandle, SidebarScrollState, SidebarScrollable, SizeDecrementButton,
-    SizeIncrementButton, SizeSliderFill, SizeSliderHandle, SizeSliderTrack, SizeText, SkinButton,
-    SkinList, SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText, StepText,
+    CameraFeedImage, CameraTrackingButton, CameraTrackingText, CloseButton, EnvControl, EnvList,
+    EnvToggleButton, MappingControl, MappingList, MappingOrderText, MappingToggleButton,
+    NextStepButton, ScrollContentWrapper, ShuffleButton, SidebarScrollHandle, SidebarScrollState,
+    SidebarScrollable, SizeDecrementButton, SizeIncrementButton, SizeSliderFill, SizeSliderHandle,
+    SizeSliderTrack, SizeText, SkinButton, SkinList, SkinToggleButton, SolutionPanel, SolveButton,
+    SolveButtonText, StepText,
 };
+use bevy::asset::RenderAssetUsages;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use rand::RngExt;
@@ -868,6 +872,75 @@ pub fn handle_sidebar_scrollbar_drag(
                 (scroll_state.drag_start_scroll_y + delta_scroll_y).clamp(0.0, max_scroll);
         } else {
             scroll_state.is_dragging = false;
+        }
+    }
+}
+
+pub fn handle_camera_toggle(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor, &mut BorderColor),
+        (Changed<Interaction>, With<CameraTrackingButton>),
+    >,
+    mut text_query: Single<&mut Text, With<CameraTrackingText>>,
+    mut image_node: Option<Single<&mut Node, With<CameraFeedImage>>>,
+    mut enabled: ResMut<HandTrackingEnabled>,
+) {
+    for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                enabled.0 = !enabled.0;
+                if enabled.0 {
+                    text_query.0 = "CAMERA: ON".to_string();
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.6, 0.3, 0.85)));
+                    *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.4, 0.9, 0.5, 0.9)));
+                    if let Some(ref mut img) = image_node {
+                        img.display = Display::Flex;
+                    }
+                } else {
+                    text_query.0 = "CAMERA: OFF".to_string();
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.15, 0.2, 0.8)));
+                    *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.3, 0.4, 0.5)));
+                    if let Some(ref mut img) = image_node {
+                        img.display = Display::None;
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                if !enabled.0 {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.2, 0.25, 0.9)));
+                }
+            }
+            Interaction::None => {
+                if !enabled.0 {
+                    *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.15, 0.2, 0.8)));
+                }
+            }
+        }
+    }
+}
+
+pub fn update_camera_feed(
+    mut events: MessageReader<CameraFrameEvent>,
+    mut images: ResMut<Assets<Image>>,
+    mut image_node: Option<Single<&mut ImageNode, With<CameraFeedImage>>>,
+) {
+    // Only process the latest frame if multiple arrived
+    if let Some(latest_event) = events.read().last() {
+        if let Some(ref mut img_node) = image_node {
+            let image = Image::new(
+                Extent3d {
+                    width: latest_event.width,
+                    height: latest_event.height,
+                    depth_or_array_layers: 1,
+                },
+                TextureDimension::D2,
+                latest_event.frame_rgba.clone(),
+                TextureFormat::Rgba8UnormSrgb,
+                RenderAssetUsages::RENDER_WORLD,
+            );
+            
+            let handle = images.add(image);
+            img_node.image = handle;
         }
     }
 }

@@ -4,7 +4,8 @@ mod mapping;
 mod sidebar;
 
 use crate::ui::components::{
-    ScrollContentWrapper, SidebarScrollHandle, SidebarScrollTrack, SidebarScrollable, SolutionPanel,
+    CameraFeedImage, CameraTrackingButton, CameraTrackingText, ScrollContentWrapper,
+    SidebarScrollHandle, SidebarScrollTrack, SidebarScrollable, SolutionPanel,
 };
 use bevy::ecs::prelude::ChildSpawnerCommands;
 use bevy::prelude::*;
@@ -169,5 +170,68 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .with_children(|parent: &mut ChildSpawnerCommands| {
             spawn_solution_hud(parent, &font);
+        });
+
+    // Top Right Camera View Panel
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(20.0),
+            right: Val::Px(20.0),
+            width: Val::Px(240.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(10.0),
+            border_radius: BorderRadius::all(Val::Px(16.0)),
+            padding: UiRect::all(Val::Px(12.0)),
+            ..default()
+        })
+        .insert((
+            BackgroundColor(Color::Srgba(Srgba::new(0.06, 0.06, 0.09, 0.85))),
+            BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.25, 0.35, 0.4))),
+        ))
+        .with_children(|parent: &mut ChildSpawnerCommands| {
+            // Toggle Button
+            parent
+                .spawn((
+                    Button,
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(35.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.3, 0.4, 0.5))),
+                    BackgroundColor(Color::Srgba(Srgba::new(0.15, 0.15, 0.2, 0.8))),
+                    CameraTrackingButton,
+                ))
+                .with_children(|btn| {
+                    btn.spawn((
+                        Text::new("CAMERA: OFF"),
+                        TextFont {
+                            font_size: 13.0,
+                            font: font.clone(),
+                            ..default()
+                        },
+                        TextColor(Color::Srgba(Srgba::new(0.6, 0.6, 0.7, 1.0))),
+                        CameraTrackingText,
+                    ));
+                });
+
+            // Camera Feed View
+            parent.spawn((
+                ImageNode::default(),
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(160.0),
+                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    display: Display::None,
+                    ..default()
+                },
+                BackgroundColor(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 1.0))), // Black background
+                CameraFeedImage,
+            ));
         });
 }
