@@ -112,6 +112,7 @@ impl FaceMapping {
     }
 
     /// Return the logic `Face` corresponding to a physical `Face`
+    #[allow(dead_code)]
     pub fn get_logic_face_for_physical(self, phys_face: Face) -> Face {
         let normal = phys_face.normal();
         let f_normal = self.f_face.normal();
@@ -194,6 +195,7 @@ impl FaceMapping {
     }
 
     /// Convert a physical `RotationMove` to its logical string representation
+    #[allow(dead_code)]
     pub fn physical_move_to_logic_string(self, m: RotationMove, size: i32) -> String {
         let phys_face = match (m.axis, m.index) {
             (RotationAxis::X, idx) if idx == size - 1 => Face::Right,

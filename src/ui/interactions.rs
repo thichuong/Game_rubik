@@ -133,19 +133,64 @@ pub fn handle_solve_button(
                     }
 
                     if !solved_with_kewb && !history.done.is_empty() {
-                        solution.moves = history
-                            .done
+                        let inverse_moves: Vec<RotationMove> =
+                            history.done.iter().rev().map(|m| m.inverse()).collect();
+                        let optimized = helpers::optimize_moves(&inverse_moves);
+                        solution.moves = optimized
                             .iter()
-                            .rev()
-                            .map(|m| helpers::move_to_string(m.inverse(), size, *face_mapping))
+                            .map(|m| {
+                                helpers::physical_move_to_logical_string_any(
+                                    *m,
+                                    size,
+                                    *face_mapping,
+                                )
+                            })
+                            .collect();
+                    }
+                } else if size == 2 {
+                    let mut solved_with_kewb = false;
+                    if let Some(state_str) =
+                        helpers::get_cube_state_for_size(size, &faces, &cube_query, *face_mapping)
+                    {
+                        if let Ok(face_cube) = kewb::FaceCube::try_from(state_str.as_str()) {
+                            if let Ok(cubie_cube) = kewb::CubieCube::try_from(&face_cube) {
+                                let mut solver = kewb::Solver::new(&solver_res.table, 23, None);
+                                if let Some(sol) = solver.solve(cubie_cube) {
+                                    solution.moves = sol
+                                        .to_string()
+                                        .split_whitespace()
+                                        .map(String::from)
+                                        .collect();
+                                    solved_with_kewb = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if !solved_with_kewb && !history.done.is_empty() {
+                        let inverse_moves: Vec<RotationMove> =
+                            history.done.iter().rev().map(|m| m.inverse()).collect();
+                        let optimized = helpers::optimize_moves(&inverse_moves);
+                        solution.moves = optimized
+                            .iter()
+                            .map(|m| {
+                                helpers::physical_move_to_logical_string_any(
+                                    *m,
+                                    size,
+                                    *face_mapping,
+                                )
+                            })
                             .collect();
                     }
                 } else if !history.done.is_empty() {
-                    solution.moves = history
-                        .done
+                    let inverse_moves: Vec<RotationMove> =
+                        history.done.iter().rev().map(|m| m.inverse()).collect();
+                    let optimized = helpers::optimize_moves(&inverse_moves);
+                    solution.moves = optimized
                         .iter()
-                        .rev()
-                        .map(|m| helpers::move_to_string(m.inverse(), size, *face_mapping))
+                        .map(|m| {
+                            helpers::physical_move_to_logical_string_any(*m, size, *face_mapping)
+                        })
                         .collect();
                 }
 
@@ -180,8 +225,11 @@ pub fn handle_next_step_button(
 
                 if solution.active && solution.current_step < solution.moves.len() {
                     let move_str = &solution.moves[solution.current_step];
-                    let moves =
-                        helpers::solution_to_moves(move_str, rubik_size.size, *face_mapping);
+                    let moves = helpers::logical_string_to_physical_moves_any(
+                        move_str,
+                        rubik_size.size,
+                        *face_mapping,
+                    );
                     for m in moves {
                         rotation_queue.0.push_back(m);
                     }
