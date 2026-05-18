@@ -114,26 +114,14 @@ pub fn handle_solve_button(
 
                 let size = rubik_size.size;
 
-                if size == 3 {
-                    let state_str = helpers::get_cube_state(&faces, &cube_query, *face_mapping);
-                    if let Some(moves) = rubik_solver::solve_cube(&state_str, &solver_res.table) {
-                        solution.moves = moves;
-                    } else {
-                        solution.failed = true;
-                    }
-                } else if size == 2 {
-                    if let Some(state_str) =
-                        helpers::get_cube_state_for_size(size, &faces, &cube_query, *face_mapping)
-                    {
-                        if let Some(moves) = rubik_solver::solve_cube(&state_str, &solver_res.table)
-                        {
-                            solution.moves = moves;
-                        } else {
-                            solution.failed = true;
-                        }
-                    } else {
-                        solution.failed = true;
-                    }
+                if let Some(moves) = rubik_solver::solve_cube_for_size(
+                    size,
+                    &faces,
+                    &cube_query,
+                    *face_mapping,
+                    &solver_res.table,
+                ) {
+                    solution.moves = moves;
                 } else {
                     solution.failed = true;
                 }

@@ -11,4 +11,4 @@ pub use helpers::{
 };
 pub use plugin::SolverPlugin;
 pub use resources::{SolverResource, StepByStepSolution};
-pub use solver::solve_cube;
+pub use solver::{solve_cube, solve_cube_for_size};

@@ -31,6 +31,7 @@ graph TD
 
     subgraph Solver ["🧠 Solver Module"]
         SolverPlugin["SolverPlugin"]
+        SolveCubeForSize["solve_cube_for_size<br>(Unified Library Entry Point)"]
         Kewb["kewb Crate (Kociemba 2-Phase)"]
         StepByStep["StepByStepSolution Resource"]
     end
@@ -70,6 +71,8 @@ graph TD
 
     %% Interactions
     UiPlugin -->|Triggers Solve/Steps| SolverPlugin
+    UiPlugin -->|Calls solve_cube_for_size| SolveCubeForSize
+    SolveCubeForSize -->|Invokes| Kewb
     UiPlugin -->|Applies Settings| EnvPlugin
     UiPlugin -->|Updates Skin State| RubikPlugin
     
@@ -162,12 +165,15 @@ Handles standard mouse clicking, camera control interception, dragging gestures,
 
 ### 3. Solver Module (`src/solver`)
 Bridges the physical 3D scene representation to the abstract mathematical two-phase algorithm.
+*   **Unified Solver Interface**:
+    *   The `rubik_solver` library exposes `solve_cube_for_size` as a single unified entry point for all supported sizes (2x2x2 and 3x3x3).
+    *   The Bevy system `handle_solve_button` invokes only this library function, completely removing individual dimension checks and state-mapping boilerplate from the ECS systems layer.
 *   **3D-to-Facelet State Mapping**:
     *   Maps each of the 6 core faces using orthogonal vector combinations (e.g. face normal vector, a right vector, and a down vector).
-    *   Iterates through the 9 positions of each face.
+    *   Iterates through the 9 positions of each face. For a 2x2x2 cube, it dynamically maps corners into a virtual 3x3x3 facelet representation.
     *   For each position, it searches for a cubie sticker whose global transform aligns with that exact spatial coordinate.
     *   Extracts the logical color (`Face`) and maps it to a standard 54-char string representation (`U...R...F...D...L...B`).
-*   **Solver Interface**: Passes the facelet string into the `kewb` library which runs Kociemba's two-phase algorithm.
+*   **Solver Interface**: Passes the generated facelet string into the Kociemba 2-phase solver (`kewb` library).
 *   **Solution Pipeline**: Converts generated steps (e.g. `R2 U' F`) into sequenced `RotationMove` structs and queues them directly inside `RotationQueue`.
 
 ### 4. Camera & Environment Module (`src/camera` & `src/environment`)
