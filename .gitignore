@@ -1,1 +1,27 @@
+# --- Rust Build Artifacts ---
 /target
+Cargo.lock
+
+# --- Python Virtual Environments & Packages ---
+.venv/
+hand_tracker/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~

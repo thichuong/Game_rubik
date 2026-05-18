@@ -1,10 +1,9 @@
 use opencv::{
     Result,
-    core::{self, BORDER_DEFAULT, Mat, Point, Scalar, Size, Vector},
-    imgproc::{self, COLOR_BGR2HSV, MORPH_ELLIPSE},
-    prelude::*,
-    videoio::{self, VideoCapture},
+    core::{self},
 };
+use std::io::{BufReader, Read};
+use std::process::{Child, Command, Stdio};
 
 /// Data sent from tracker thread to the game
 pub struct TrackerData {
@@ -56,60 +55,56 @@ impl Default for SkinConfig {
     }
 }
 
-/// Simple swipe-based hand tracker using skin color segmentation.
+/// Hand tracker using Google ML Kit / MediaPipe via a Python subprocess.
 ///
 /// Pipeline:
-/// 1. HSV skin segmentation → morphological cleanup
-/// 2. Find largest skin contour → compute centroid
-/// 3. Smooth centroid with EMA → compute frame-to-frame delta
-/// 4. Apply dead zone filter → emit delta as rotation input
-///
-/// No complex gesture recognition needed — just track hand movement
-/// like a finger swiping on a touchscreen.
+/// 1. Spawns Python virtual environment running MediaPipe Hands
+/// 2. Reads structured binary packets from stdout
+/// 3. EMA smooths hand center and computes swipe delta
+/// 4. Converts frame to RGBA and returns to Bevy
 pub struct HandTracker {
-    cap: VideoCapture,
+    child: Child,
+    reader: BufReader<std::process::ChildStdout>,
     config: SkinConfig,
-    // EMA-smoothed centroid position
     smoothed_cx: Option<f32>,
     smoothed_cy: Option<f32>,
-    // Previous smoothed position for delta calculation
     prev_cx: Option<f32>,
     prev_cy: Option<f32>,
-    // Counter for consecutive frames without hand detection
     lost_frames: u32,
-    // Pre-allocated Mat buffers
-    buf_hsv: Mat,
-    buf_mask: Mat,
-    buf_morph: Mat,
-    buf_small: Mat,
-    buf_rgba: Mat,
 }
 
 impl HandTracker {
-    /// Create a new hand tracker, opening the default camera
+    /// Create a new hand tracker, spawning the Python MediaPipe worker
     pub fn new() -> Result<Self> {
-        let mut cap = VideoCapture::new(0, videoio::CAP_ANY)?;
-        if !cap.is_opened()? {
-            return Err(opencv::Error::new(core::StsError, "Cannot open camera"));
-        }
+        let python_path = "hand_tracker/.venv/bin/python";
+        let script_path = "hand_tracker/hand_tracker.py";
 
-        // Read one frame to warm up the camera
-        let mut warmup = Mat::default();
-        cap.read(&mut warmup)?;
+        let mut child = Command::new(python_path)
+            .arg(script_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| {
+                opencv::Error::new(
+                    core::StsError,
+                    format!("Failed to spawn Python MediaPipe process: {e}"),
+                )
+            })?;
+
+        let stdout = child.stdout.take().ok_or_else(|| {
+            opencv::Error::new(core::StsError, "Failed to capture Python stdout stream")
+        })?;
+        let reader = BufReader::new(stdout);
 
         Ok(Self {
-            cap,
+            child,
+            reader,
             config: SkinConfig::default(),
             smoothed_cx: None,
             smoothed_cy: None,
             prev_cx: None,
             prev_cy: None,
             lost_frames: 0,
-            buf_hsv: Mat::default(),
-            buf_mask: Mat::default(),
-            buf_morph: Mat::default(),
-            buf_small: Mat::default(),
-            buf_rgba: Mat::default(),
         })
     }
 
@@ -131,208 +126,89 @@ impl HandTracker {
 
     /// Process one camera frame and return tracking data.
     pub fn get_delta(&mut self) -> Result<Option<TrackerData>> {
-        let mut frame = Mat::default();
-        self.cap.read(&mut frame)?;
-        if frame.empty() {
-            return Ok(None);
+        // Header is 25 bytes:
+        // 4 bytes: "HAND"
+        // 4 bytes: width (u32)
+        // 4 bytes: height (u32)
+        // 1 byte: has_center (u8)
+        // 4 bytes: cx (f32)
+        // 4 bytes: cy (f32)
+        // 4 bytes: frame_len (u32)
+        let mut header = [0u8; 25];
+        if let Err(e) = self.reader.read_exact(&mut header) {
+            return Err(opencv::Error::new(
+                core::StsError,
+                format!("Failed to read packet header: {e}"),
+            ));
         }
 
-        // Mirror the frame horizontally (webcam mirror effect)
-        let mut flipped = Mat::default();
-        core::flip(&frame, &mut flipped, 1)?;
-        frame = flipped;
-
-        // Resize for gesture processing (keep original for display)
-        imgproc::resize(
-            &frame,
-            &mut self.buf_small,
-            Size::new(320, 240),
-            0.0,
-            0.0,
-            imgproc::INTER_LINEAR,
-        )?;
-
-        // --- Skin Color Segmentation ---
-        imgproc::cvt_color(
-            &self.buf_small,
-            &mut self.buf_hsv,
-            COLOR_BGR2HSV,
-            0,
-            core::AlgorithmHint::ALGO_HINT_DEFAULT,
-        )?;
-
-        let lower = Scalar::new(self.config.h_min, self.config.s_min, self.config.v_min, 0.0);
-        let upper = Scalar::new(self.config.h_max, self.config.s_max, self.config.v_max, 0.0);
-        core::in_range(&self.buf_hsv, &lower, &upper, &mut self.buf_mask)?;
-
-        // Morphological cleanup: erode → dilate → median blur
-        let kernel_small =
-            imgproc::get_structuring_element(MORPH_ELLIPSE, Size::new(3, 3), Point::new(-1, -1))?;
-        let kernel_large =
-            imgproc::get_structuring_element(MORPH_ELLIPSE, Size::new(5, 5), Point::new(-1, -1))?;
-
-        // erode: mask → morph
-        imgproc::erode(
-            &self.buf_mask,
-            &mut self.buf_morph,
-            &kernel_small,
-            Point::new(-1, -1),
-            2,
-            BORDER_DEFAULT,
-            Scalar::default(),
-        )?;
-        // dilate: morph → mask
-        imgproc::dilate(
-            &self.buf_morph,
-            &mut self.buf_mask,
-            &kernel_large,
-            Point::new(-1, -1),
-            3,
-            BORDER_DEFAULT,
-            Scalar::default(),
-        )?;
-        // median blur: mask → morph (final skin mask)
-        imgproc::median_blur(&self.buf_mask, &mut self.buf_morph, 7)?;
-
-        // --- Find Contours ---
-        let mut contours = Vector::<Vector<Point>>::new();
-        imgproc::find_contours(
-            &self.buf_morph,
-            &mut contours,
-            imgproc::RETR_EXTERNAL,
-            imgproc::CHAIN_APPROX_SIMPLE,
-            Point::new(0, 0),
-        )?;
-
-        // Find the largest contour above area threshold
-        let mut max_area = 0.0;
-        let mut best_idx: Option<usize> = None;
-        for i in 0..contours.len() {
-            if let Ok(cnt) = contours.get(i)
-                && let Ok(area) = imgproc::contour_area(&cnt, false)
-                && area > self.config.min_contour_area
-                && area > max_area
-            {
-                max_area = area;
-                best_idx = Some(i);
-            }
+        if &header[0..4] != b"HAND" {
+            return Err(opencv::Error::new(
+                core::StsError,
+                "Invalid packet header: expected 'HAND'",
+            ));
         }
 
-        // Scale factors for mapping small-frame coords back to display frame
-        let frame_size = frame.size()?;
-        let scale_x = frame_size.width as f32 / 320.0;
-        let scale_y = frame_size.height as f32 / 240.0;
+        let w = read_u32_le(&header[4..8]);
+        let h = read_u32_le(&header[8..12]);
+        let has_center = header[12] != 0;
+        let cx = read_f32_le(&header[13..17]);
+        let cy = read_f32_le(&header[17..21]);
+        let frame_len = read_u32_le(&header[21..25]) as usize;
 
-        // --- Compute centroid and delta ---
-        let (hand_center, delta) = if let Some(idx) = best_idx {
-            if let Ok(cnt) = contours.get(idx) {
-                // Draw contour on display frame
-                self.draw_contour_scaled(&mut frame, &cnt, scale_x, scale_y);
+        // Read the raw frame bytes
+        let mut frame_rgba = vec![0u8; frame_len];
+        if let Err(e) = self.reader.read_exact(&mut frame_rgba) {
+            return Err(opencv::Error::new(
+                core::StsError,
+                format!("Failed to read frame bytes: {e}"),
+            ));
+        }
 
-                // Compute centroid on small frame
-                let m = imgproc::moments(&cnt, false)?;
-                if m.m00 > 0.0 {
-                    let raw_cx = (m.m10 / m.m00) as f32 * scale_x;
-                    let raw_cy = (m.m01 / m.m00) as f32 * scale_y;
+        // Compute centroid and delta
+        let (hand_center, delta) = if has_center {
+            self.lost_frames = 0;
 
-                    self.lost_frames = 0;
+            // EMA smooth the centroid
+            let alpha = self.config.ema_alpha;
+            let sx = Self::ema(self.smoothed_cx, cx, alpha);
+            let sy = Self::ema(self.smoothed_cy, cy, alpha);
+            self.smoothed_cx = Some(sx);
+            self.smoothed_cy = Some(sy);
 
-                    // EMA smooth the centroid
-                    let alpha = self.config.ema_alpha;
-                    let sx = Self::ema(self.smoothed_cx, raw_cx, alpha);
-                    let sy = Self::ema(self.smoothed_cy, raw_cy, alpha);
-                    self.smoothed_cx = Some(sx);
-                    self.smoothed_cy = Some(sy);
+            // Compute delta from previous smoothed position
+            let delta = if let (Some(px), Some(py)) = (self.prev_cx, self.prev_cy) {
+                let dx = sx - px;
+                let dy = sy - py;
 
-                    // Compute delta from previous smoothed position
-                    let delta = if let (Some(px), Some(py)) = (self.prev_cx, self.prev_cy) {
-                        let dx = sx - px;
-                        let dy = sy - py;
-
-                        // Dead zone: ignore micro-movements
-                        let mag_sq = dx * dx + dy * dy;
-                        let dz_sq = self.config.dead_zone * self.config.dead_zone;
-                        if mag_sq > dz_sq {
-                            let sens = self.config.sensitivity;
-                            Some((dx * sens, dy * sens))
-                        } else {
-                            None
-                        }
-                    } else {
-                        // First frame with detection — no delta yet
-                        None
-                    };
-
-                    self.prev_cx = Some(sx);
-                    self.prev_cy = Some(sy);
-
-                    (Some((sx, sy)), delta)
+                // Dead zone: ignore micro-movements
+                let mag_sq = dx * dx + dy * dy;
+                let dz_sq = self.config.dead_zone * self.config.dead_zone;
+                if mag_sq > dz_sq {
+                    let sens = self.config.sensitivity;
+                    Some((dx * sens, dy * sens))
                 } else {
-                    self.handle_lost_frame();
-                    (None, None)
+                    None
                 }
             } else {
-                self.handle_lost_frame();
-                (None, None)
-            }
+                None
+            };
+
+            self.prev_cx = Some(sx);
+            self.prev_cy = Some(sy);
+
+            (Some((sx, sy)), delta)
         } else {
             self.handle_lost_frame();
             (None, None)
         };
 
-        // --- Draw debug overlay ---
-        let status = if delta.is_some() {
-            "SWIPING"
-        } else if hand_center.is_some() {
-            "TRACKING"
-        } else {
-            "NO HAND"
-        };
-        let _ = imgproc::put_text(
-            &mut frame,
-            status,
-            Point::new(10, 30),
-            imgproc::FONT_HERSHEY_SIMPLEX,
-            1.0,
-            Scalar::new(0.0, 255.0, 255.0, 0.0),
-            2,
-            imgproc::LINE_AA,
-            false,
-        );
-
-        if let Some((cx, cy)) = hand_center {
-            let _ = imgproc::circle(
-                &mut frame,
-                Point::new(cx as i32, cy as i32),
-                8,
-                Scalar::new(255.0, 0.0, 255.0, 0.0),
-                -1,
-                imgproc::LINE_AA,
-                0,
-            );
-        }
-
-        // --- Convert to RGBA for Bevy display ---
-        imgproc::cvt_color(
-            &frame,
-            &mut self.buf_rgba,
-            imgproc::COLOR_BGR2RGBA,
-            0,
-            core::AlgorithmHint::ALGO_HINT_DEFAULT,
-        )?;
-
-        let size = self.buf_rgba.size()?;
-        let width = size.width as u32;
-        let height = size.height as u32;
-        let bytes = self.buf_rgba.data_bytes()?;
-        let frame_rgba = bytes.to_vec();
-
         Ok(Some(TrackerData {
             delta,
             hand_center,
             frame_rgba,
-            width,
-            height,
+            width: w,
+            height: h,
         }))
     }
 
@@ -343,36 +219,29 @@ impl HandTracker {
             self.reset_tracking();
         }
     }
+}
 
-    /// Draw a contour scaled from small-frame coordinates to display-frame coordinates
-    fn draw_contour_scaled(
-        &self,
-        frame: &mut Mat,
-        contour: &Vector<Point>,
-        scale_x: f32,
-        scale_y: f32,
-    ) {
-        let mut scaled_points = Vector::<Point>::new();
-        for j in 0..contour.len() {
-            if let Ok(p) = contour.get(j) {
-                scaled_points.push(Point::new(
-                    (p.x as f32 * scale_x) as i32,
-                    (p.y as f32 * scale_y) as i32,
-                ));
-            }
-        }
-        let mut scaled_contours = Vector::<Vector<Point>>::new();
-        scaled_contours.push(scaled_points);
-        let _ = imgproc::draw_contours(
-            frame,
-            &scaled_contours,
-            0,
-            Scalar::new(0.0, 255.0, 0.0, 0.0),
-            2,
-            imgproc::LINE_8,
-            &core::no_array(),
-            i32::MAX,
-            Point::new(0, 0),
-        );
+impl Drop for HandTracker {
+    fn drop(&mut self) {
+        // Terminate the worker subprocess on drop
+        let _ = self.child.kill();
     }
+}
+
+/// Read a u32 from a little-endian byte slice safely without panics
+fn read_u32_le(slice: &[u8]) -> u32 {
+    let mut bytes = [0u8; 4];
+    if slice.len() >= 4 {
+        bytes.copy_from_slice(&slice[..4]);
+    }
+    u32::from_le_bytes(bytes)
+}
+
+/// Read a f32 from a little-endian byte slice safely without panics
+fn read_f32_le(slice: &[u8]) -> f32 {
+    let mut bytes = [0u8; 4];
+    if slice.len() >= 4 {
+        bytes.copy_from_slice(&slice[..4]);
+    }
+    f32::from_le_bytes(bytes)
 }
