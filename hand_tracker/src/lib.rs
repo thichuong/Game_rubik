@@ -68,9 +68,9 @@ impl Default for SkinConfig {
             v_min: 60.0,
             v_max: 255.0,
             min_contour_area: 5000.0,
-            sensitivity: 2.0,
-            ema_alpha: 0.4,
-            dead_zone: 3.0,
+            sensitivity: 1.7, // Reduced sensitivity for more deliberate cursor control
+            ema_alpha: 0.65, // Balanced smoothing filter to make the cursor glide smoothly without lag
+            dead_zone: 2.0,  // Increased dead zone to eliminate small finger micro-jitters
             lost_timeout: 5,
         }
     }

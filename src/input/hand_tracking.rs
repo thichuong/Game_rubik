@@ -98,8 +98,7 @@ fn setup_camera_listener(mut commands: Commands) {
                     break;
                 }
             }
-            // ~60 FPS processing rate
-            thread::sleep(std::time::Duration::from_millis(16));
+            // No sleep here: block naturally on pipe read_exact to ensure absolute real-time synchronization
         }
     });
 
@@ -136,51 +135,80 @@ fn receive_hand_tracking(
     let (camera, camera_transform) = *camera_query;
     let cube_transform = *cube_query;
 
+    // Drain the channel and only keep the latest packet to eliminate accumulated latency (I/O lag)
+    let mut latest_data = None;
     for data in rx.try_iter() {
-        // Send camera frame to UI
-        frame_events.write(CameraFrameEvent {
-            frame_rgba: data.frame_rgba,
-            width: data.width,
-            height: data.height,
-        });
+        latest_data = Some(data);
+    }
 
-        // Store latest hands state for 3D visual rendering
-        hands_state.hands = data.hands;
+    let Some(data) = latest_data else {
+        return;
+    };
 
-        if enabled.0 {
-            let hands = &hands_state.hands;
-            let mut left_active = false;
-            let mut right_active = false;
+    // Send camera frame to UI
+    frame_events.write(CameraFrameEvent {
+        frame_rgba: data.frame_rgba,
+        width: data.width,
+        height: data.height,
+    });
 
-            for hand in hands {
-                if hand.handedness == 0 {
-                    left_active = true;
-                } else {
-                    right_active = true;
+    // Store latest hands state for 3D visual rendering
+    hands_state.hands = data.hands;
+
+    if enabled.0 {
+        let hands = &hands_state.hands;
+        let mut left_active = false;
+        let mut right_active = false;
+
+        for hand in hands {
+            if hand.handedness == 0 {
+                left_active = true;
+            } else {
+                right_active = true;
+            }
+
+            let drag_sub_state = if hand.handedness == 0 {
+                &mut drag_state.left
+            } else {
+                &mut drag_state.right
+            };
+
+            if hand.gesture_type == 1 {
+                // Open hand: Rotate the entire Rubik's cube
+                if drag_sub_state.prev_gesture_type == 2 || drag_sub_state.prev_gesture_type == 3 {
+                    drag_sub_state.start_face = None;
                 }
-
-                let drag_sub_state = if hand.handedness == 0 {
-                    &mut drag_state.left
-                } else {
-                    &mut drag_state.right
-                };
-
-                if hand.gesture_type == 1 {
-                    // Open hand: Rotate the entire Rubik's cube
-                    if drag_sub_state.prev_gesture_type == 2 {
-                        drag_sub_state.start_face = None;
-                    }
-                    if let Some((dx, dy)) = hand.delta {
-                        rot_events.write(HandRotationEvent {
-                            delta_x: dx,
-                            delta_y: dy,
-                        });
-                    }
-                    drag_sub_state.prev_gesture_type = 1;
-                } else if hand.gesture_type == 2 {
-                    // Index Pointing: Rotate face in real-time
-                    process_face_active_drag(
-                        hand.gesture_type,
+                if let Some((dx, dy)) = hand.delta {
+                    rot_events.write(HandRotationEvent {
+                        delta_x: dx,
+                        delta_y: dy,
+                    });
+                }
+                drag_sub_state.prev_gesture_type = 1;
+            } else if hand.gesture_type == 2 {
+                // Reset start face when transitioning from folded (Gesture 3) to extended (Gesture 2)
+                if drag_sub_state.prev_gesture_type == 3 {
+                    drag_sub_state.start_face = None;
+                }
+                // Index Extended: Hover to select the start face under finger
+                process_face_hover_select(
+                    hand.cursor,
+                    data.width,
+                    data.height,
+                    drag_sub_state,
+                    window,
+                    camera,
+                    camera_transform,
+                    &cubie_faces,
+                );
+                drag_sub_state.prev_gesture_type = 2;
+            } else if hand.gesture_type == 3 {
+                // Index Folded: Swipe and rotate the face in the fold direction
+                // Support continuous fluid dragging while index finger remains folded
+                if (drag_sub_state.prev_gesture_type == 2 || drag_sub_state.prev_gesture_type == 3)
+                    && drag_sub_state.start_face.is_some()
+                {
+                    execute_face_swipe_rotation(
                         hand.cursor,
                         data.width,
                         data.height,
@@ -193,36 +221,91 @@ fn receive_hand_tracking(
                         cube_transform,
                         *rubik_size,
                     );
-                } else {
-                    // Clean up face drag for other/unknown gestures
-                    if drag_sub_state.prev_gesture_type == 2 {
-                        drag_sub_state.start_face = None;
-                    }
-                    drag_sub_state.prev_gesture_type = hand.gesture_type;
                 }
+                drag_sub_state.prev_gesture_type = 3;
+            } else {
+                // Clean up face drag for other/unknown/idle gestures
+                if drag_sub_state.prev_gesture_type == 2 || drag_sub_state.prev_gesture_type == 3 {
+                    drag_sub_state.start_face = None;
+                }
+                drag_sub_state.prev_gesture_type = hand.gesture_type;
             }
+        }
 
-            // Clean up drag state for hands that disappeared in this frame
-            if !left_active && drag_state.left.prev_gesture_type == 2 {
-                drag_state.left.start_face = None;
-                drag_state.left.prev_gesture_type = 0;
-            }
-            if !right_active && drag_state.right.prev_gesture_type == 2 {
-                drag_state.right.start_face = None;
-                drag_state.right.prev_gesture_type = 0;
-            }
+        // Clean up drag state for hands that disappeared in this frame
+        if !left_active
+            && (drag_state.left.prev_gesture_type == 2 || drag_state.left.prev_gesture_type == 3)
+        {
+            drag_state.left.start_face = None;
+            drag_state.left.prev_gesture_type = 0;
+        }
+        if !right_active
+            && (drag_state.right.prev_gesture_type == 2 || drag_state.right.prev_gesture_type == 3)
+        {
+            drag_state.right.start_face = None;
+            drag_state.right.prev_gesture_type = 0;
         }
     }
 }
 
+/// Detect and continuously select the cubie face under the extended index finger
+#[allow(clippy::cast_precision_loss)]
+fn process_face_hover_select(
+    cursor: (f32, f32),
+    tracker_w: u32,
+    tracker_h: u32,
+    drag_state: &mut SingleHandDragState,
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    cubie_faces: &Query<(Entity, &CubieFace, &GlobalTransform)>,
+) {
+    let window_width = window.width();
+    let window_height = window.height();
+    let mapped_x = (cursor.0 / tracker_w as f32) * window_width;
+    let mapped_y = (cursor.1 / tracker_h as f32) * window_height;
+    let mapped_cursor = Vec2::new(mapped_x, mapped_y);
+
+    let Ok(ray) = camera.viewport_to_world(camera_transform, mapped_cursor) else {
+        return;
+    };
+
+    let mut closest_hit = None;
+    let mut min_dist = f32::MAX;
+
+    for (entity, _cubie_face, transform) in cubie_faces.iter() {
+        let normal = transform.back();
+        let center = transform.translation();
+
+        let denom = ray.direction.dot(*normal);
+        if denom.abs() > 1e-6 {
+            let t = (center.dot(*normal) - ray.origin.dot(*normal)) / denom;
+            if t > 0.0 && t < min_dist {
+                let hit_point = ray.origin + *ray.direction * t;
+                let local_hit = hit_point - center;
+                let right = transform.right();
+                let up = transform.up();
+
+                if local_hit.dot(*right).abs() <= 0.51 && local_hit.dot(*up).abs() <= 0.51 {
+                    min_dist = t;
+                    closest_hit = Some((entity, *normal, hit_point));
+                }
+            }
+        }
+    }
+
+    if let Some((entity, normal, hit_point)) = closest_hit {
+        drag_state.start_face = Some((entity, normal, hit_point));
+    }
+}
+
+/// Execute continuous face rotation based on the finger fold drag direction
 #[allow(
     clippy::too_many_arguments,
     clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::too_many_lines
+    clippy::cast_possible_truncation
 )]
-fn process_face_active_drag(
-    gesture_type: u8,
+fn execute_face_swipe_rotation(
     cursor: (f32, f32),
     tracker_w: u32,
     tracker_h: u32,
@@ -235,6 +318,11 @@ fn process_face_active_drag(
     cube_transform: &GlobalTransform,
     rubik_size: RubikSize,
 ) {
+    // Read the start face, but do NOT remove it to support continuous fluid dragging
+    let Some((start_entity, start_normal, start_hit_point)) = drag_state.start_face else {
+        return;
+    };
+
     let window_width = window.width();
     let window_height = window.height();
     let mapped_x = (cursor.0 / tracker_w as f32) * window_width;
@@ -245,114 +333,72 @@ fn process_face_active_drag(
         return;
     };
 
-    if gesture_type == 2 {
-        if drag_state.prev_gesture_type != 2 || drag_state.start_face.is_none() {
-            // Step 1: Detect starting face when we just entered Gesture 2 (Index Pointing)
-            let mut closest_hit = None;
-            let mut min_dist = f32::MAX;
+    let denom = ray.direction.dot(start_normal);
+    if denom.abs() > 1e-6 {
+        let t = (start_hit_point.dot(start_normal) - ray.origin.dot(start_normal)) / denom;
+        let end_hit_point = ray.origin + *ray.direction * t;
+        let drag_vec = end_hit_point - start_hit_point;
 
-            for (entity, _cubie_face, transform) in cubie_faces.iter() {
-                let normal = transform.back();
-                let center = transform.translation();
+        // Perform drag rotation if movement threshold is exceeded (0.55 is less sensitive and safer)
+        if drag_vec.length() > 0.55 {
+            let drag_dir = drag_vec.normalize();
+            let rotation_axis_vec = start_normal.cross(drag_dir);
 
-                let denom = ray.direction.dot(*normal);
-                if denom.abs() > 1e-6 {
-                    let t = (center.dot(*normal) - ray.origin.dot(*normal)) / denom;
-                    if t > 0.0 && t < min_dist {
-                        let hit_point = ray.origin + *ray.direction * t;
-                        let local_hit = hit_point - center;
-                        let right = transform.right();
-                        let up = transform.up();
+            let mut best_axis = RotationAxis::X;
+            let mut max_dot = 0.0;
+            let mut best_local_axis_in_world = Vec3::X;
 
-                        if local_hit.dot(*right).abs() <= 0.51 && local_hit.dot(*up).abs() <= 0.51 {
-                            min_dist = t;
-                            closest_hit = Some((entity, *normal, hit_point));
-                        }
-                    }
+            for axis in [RotationAxis::X, RotationAxis::Y, RotationAxis::Z] {
+                let local_axis_in_world = cube_transform.affine().transform_vector3(axis.vector());
+                let dot = rotation_axis_vec.dot(local_axis_in_world).abs();
+                if dot > max_dot {
+                    max_dot = dot;
+                    best_axis = axis;
+                    best_local_axis_in_world = local_axis_in_world;
                 }
             }
 
-            if let Some((entity, normal, hit_point)) = closest_hit {
-                drag_state.start_face = Some((entity, normal, hit_point));
-            }
-        } else if let Some((start_entity, start_normal, start_hit_point)) = drag_state.start_face {
-            // Step 2: Track active dragging relative to start point
-            let denom = ray.direction.dot(start_normal);
-            if denom.abs() > 1e-6 {
-                let t = (start_hit_point.dot(start_normal) - ray.origin.dot(start_normal)) / denom;
-                let end_hit_point = ray.origin + *ray.direction * t;
-                let drag_vec = end_hit_point - start_hit_point;
+            let sign = rotation_axis_vec.dot(best_local_axis_in_world).signum();
+            let direction = if sign > 0.0 {
+                Direction::CounterClockwise
+            } else {
+                Direction::Clockwise
+            };
 
-                // Emulate drag-to-rotate in real-time if movement threshold is exceeded
-                if drag_vec.length() > 0.35 {
-                    let drag_dir = drag_vec.normalize();
-                    let rotation_axis_vec = start_normal.cross(drag_dir);
-
-                    let mut best_axis = RotationAxis::X;
-                    let mut max_dot = 0.0;
-                    let mut best_local_axis_in_world = Vec3::X;
-
-                    for axis in [RotationAxis::X, RotationAxis::Y, RotationAxis::Z] {
-                        let local_axis_in_world =
-                            cube_transform.affine().transform_vector3(axis.vector());
-                        let dot = rotation_axis_vec.dot(local_axis_in_world).abs();
-                        if dot > max_dot {
-                            max_dot = dot;
-                            best_axis = axis;
-                            best_local_axis_in_world = local_axis_in_world;
-                        }
-                    }
-
-                    let sign = rotation_axis_vec.dot(best_local_axis_in_world).signum();
-                    let direction = if sign > 0.0 {
-                        Direction::CounterClockwise
-                    } else {
-                        Direction::Clockwise
-                    };
-
-                    let index = {
-                        if let Ok((_ent, _face, transform)) = cubie_faces.get(start_entity) {
-                            let cubie_pos = transform.translation();
-                            let local_pos = cube_transform
-                                .affine()
-                                .inverse()
-                                .transform_point3(cubie_pos);
-                            let size = rubik_size.size;
-                            let scale = 3.0 / size as f32;
-                            let current_gap = GAP * scale;
-                            let offset = (size as f32 - 1.0) / 2.0;
-                            match best_axis {
-                                RotationAxis::X => {
-                                    ((local_pos.x / current_gap) + offset).round() as i32
-                                }
-                                RotationAxis::Y => {
-                                    ((local_pos.y / current_gap) + offset).round() as i32
-                                }
-                                RotationAxis::Z => {
-                                    ((local_pos.z / current_gap) + offset).round() as i32
-                                }
-                            }
-                        } else {
-                            0
-                        }
-                    };
-
+            let index = {
+                if let Ok((_ent, _face, transform)) = cubie_faces.get(start_entity) {
+                    let cubie_pos = transform.translation();
+                    let local_pos = cube_transform
+                        .affine()
+                        .inverse()
+                        .transform_point3(cubie_pos);
                     let size = rubik_size.size;
-                    if size % 2 == 0 || index != size / 2 {
-                        rotation_queue.0.push_back(RotationMove {
-                            axis: best_axis,
-                            index,
-                            direction,
-                            add_to_history: true,
-                        });
+                    let scale = 3.0 / size as f32;
+                    let current_gap = GAP * scale;
+                    let offset = (size as f32 - 1.0) / 2.0;
+                    match best_axis {
+                        RotationAxis::X => ((local_pos.x / current_gap) + offset).round() as i32,
+                        RotationAxis::Y => ((local_pos.y / current_gap) + offset).round() as i32,
+                        RotationAxis::Z => ((local_pos.z / current_gap) + offset).round() as i32,
                     }
-
-                    // Fluid rotation: update start position to current hit point so user can drag continuously
-                    drag_state.start_face = Some((start_entity, start_normal, end_hit_point));
+                } else {
+                    0
                 }
+            };
+
+            let size = rubik_size.size;
+            if size % 2 == 0 || index != size / 2 {
+                rotation_queue.0.push_back(RotationMove {
+                    axis: best_axis,
+                    index,
+                    direction,
+                    add_to_history: true,
+                });
             }
+
+            // Fluid dragging: Update the start hit point to current hit point so the user can drag continuously
+            drag_state.start_face = Some((start_entity, start_normal, end_hit_point));
         }
-        drag_state.prev_gesture_type = 2;
     }
 }
 
@@ -395,26 +441,12 @@ fn setup_hand_hover_materials(
     commands.insert_resource(hover_materials);
 }
 
-#[allow(
-    clippy::type_complexity,
-    clippy::suboptimal_flops,
-    clippy::too_many_lines
-)]
+/// Highlight ONLY the single cubie face that is currently selected in `HandDragState`
+#[allow(clippy::type_complexity)]
 fn update_hand_hover(
     mut commands: Commands,
     enabled: Res<HandTrackingEnabled>,
-    hands_state: Res<HandTrackingStateResource>,
-    camera_query: Query<&GlobalTransform, With<Camera3d>>,
-    rubik_size: Res<RubikSize>,
-    cubie_query: Query<
-        (
-            Entity,
-            &crate::rubik::components::GridCoord,
-            &GlobalTransform,
-            &Children,
-        ),
-        With<crate::rubik::components::Cubie>,
-    >,
+    drag_state: Res<HandDragState>,
     mut face_material_query: Query<(
         Entity,
         &CubieFace,
@@ -440,150 +472,33 @@ fn update_hand_hover(
         }
     }
 
-    // 2. If hand tracking is disabled or no hands are visible, stop here
-    if !enabled.0 || hands_state.hands.is_empty() {
+    // 2. If hand tracking is disabled, stop here
+    if !enabled.0 {
         return;
     }
 
-    let Some(camera_transform) = camera_query.iter().next() else {
-        return;
-    };
+    // 3. Collect active selected start faces from drag state (maximum 1 face highlighted per hand)
+    let mut faces_to_hover = Vec::new();
+    if let Some((entity, _, _)) = drag_state.left.start_face {
+        faces_to_hover.push(entity);
+    }
+    if let Some((entity, _, _)) = drag_state.right.start_face {
+        faces_to_hover.push(entity);
+    }
 
-    let size = rubik_size.size;
-    let width_scale = 3.5;
-    let height_scale = 2.5;
-    let depth_scale = 3.0;
-    let distance_from_camera = 4.0;
-
-    // Helper closure to identify corner cubies in NxNxN logical grid
-    let is_corner = |coord: IVec3| -> bool {
-        let max_val = size - 1;
-        (coord.x == 0 || coord.x == max_val)
-            && (coord.y == 0 || coord.y == max_val)
-            && (coord.z == 0 || coord.z == max_val)
-    };
-
-    // Helper closure to identify edge cubies in NxNxN logical grid (exactly 2 coords are at borders)
-    let is_edge = |coord: IVec3| -> bool {
-        let max_val = size - 1;
-        let count = i32::from(coord.x == 0 || coord.x == max_val)
-            + i32::from(coord.y == 0 || coord.y == max_val)
-            + i32::from(coord.z == 0 || coord.z == max_val);
-        count == 2
-    };
-
-    for hand in &hands_state.hands {
-        // Thumb (4) and Index (8) are required to initiate the hand hover simulator
-        let Some(lm4) = hand.landmarks.get(4) else {
-            continue;
-        };
-        let Some(lm8) = hand.landmarks.get(8) else {
-            continue;
-        };
-
-        // Project finger 2D coordinates into 3D world space camera plane
-        let thumb_local = Vec3::new(
-            (lm4.x - 0.5) * width_scale,
-            (0.5 - lm4.y) * height_scale,
-            -distance_from_camera + (lm4.z * depth_scale),
-        );
-        let thumb_world = camera_transform.transform_point(thumb_local);
-
-        let index_local = Vec3::new(
-            (lm8.x - 0.5) * width_scale,
-            (0.5 - lm8.y) * height_scale,
-            -distance_from_camera + (lm8.z * depth_scale),
-        );
-        let index_world = camera_transform.transform_point(index_local);
-
-        let mut best_thumb_corner = None;
-        let mut min_thumb_dist = f32::MAX;
-
-        let mut best_index_corner = None;
-        let mut min_index_dist = f32::MAX;
-
-        // Process other finger tips (Middle: 12, Ring: 16, Pinky: 20)
-        let lm12 = hand.landmarks.get(12);
-        let lm16 = hand.landmarks.get(16);
-        let lm20 = hand.landmarks.get(20);
-
-        let mut other_fingers_world = Vec::with_capacity(3);
-        for lm in [lm12, lm16, lm20].into_iter().flatten() {
-            let local_pos = Vec3::new(
-                (lm.x - 0.5) * width_scale,
-                (0.5 - lm.y) * height_scale,
-                -distance_from_camera + (lm.z * depth_scale),
-            );
-            other_fingers_world.push(camera_transform.transform_point(local_pos));
-        }
-
-        let mut other_fingers_best_cubie = vec![None; other_fingers_world.len()];
-        let mut other_fingers_min_dist = vec![f32::MAX; other_fingers_world.len()];
-
-        // Find the closest cubies
-        for (cubie_ent, coord, transform, children) in &cubie_query {
-            let cubie_pos = transform.translation();
-            let coord_vec = coord.0;
-
-            if is_corner(coord_vec) {
-                let d_thumb = cubie_pos.distance(thumb_world);
-                if d_thumb < min_thumb_dist {
-                    min_thumb_dist = d_thumb;
-                    best_thumb_corner = Some((cubie_ent, children));
-                }
-
-                let d_index = cubie_pos.distance(index_world);
-                if d_index < min_index_dist {
-                    min_index_dist = d_index;
-                    best_index_corner = Some((cubie_ent, children));
-                }
-            }
-
-            if is_corner(coord_vec) || is_edge(coord_vec) {
-                for (i, &f_world) in other_fingers_world.iter().enumerate() {
-                    let d = cubie_pos.distance(f_world);
-                    if d < other_fingers_min_dist[i] {
-                        other_fingers_min_dist[i] = d;
-                        other_fingers_best_cubie[i] = Some((cubie_ent, children));
-                    }
-                }
-            }
-        }
-
-        let mut cubies_to_hover = Vec::new();
-        if let Some((_, children)) = best_thumb_corner {
-            cubies_to_hover.push(children);
-        }
-        if let Some((_, children)) = best_index_corner {
-            cubies_to_hover.push(children);
-        }
-
-        // Other fingers only hover if close enough to simulate a natural touch
-        for (i, &min_d) in other_fingers_min_dist.iter().enumerate() {
-            if min_d < 1.3 {
-                if let Some((_, children)) = &other_fingers_best_cubie[i] {
-                    cubies_to_hover.push(*children);
-                }
-            }
-        }
-
-        // Apply glowing hover materials to all faces of the selected cubies
-        for children in cubies_to_hover {
-            for &child in children {
-                if let Ok((_ent, face, mut material, _hovered)) = face_material_query.get_mut(child)
-                {
-                    let hover_mat = match face.0 {
-                        crate::rubik::components::Face::Up => &hover_materials.white,
-                        crate::rubik::components::Face::Down => &hover_materials.yellow,
-                        crate::rubik::components::Face::Left => &hover_materials.orange,
-                        crate::rubik::components::Face::Right => &hover_materials.red,
-                        crate::rubik::components::Face::Front => &hover_materials.green,
-                        crate::rubik::components::Face::Back => &hover_materials.blue,
-                    };
-                    *material = MeshMaterial3d(hover_mat.clone());
-                    commands.entity(child).insert(HandHovered);
-                }
-            }
+    // 4. Apply glowing hover materials to these specific active faces
+    for entity in faces_to_hover {
+        if let Ok((_ent, face, mut material, _hovered)) = face_material_query.get_mut(entity) {
+            let hover_mat = match face.0 {
+                crate::rubik::components::Face::Up => &hover_materials.white,
+                crate::rubik::components::Face::Down => &hover_materials.yellow,
+                crate::rubik::components::Face::Left => &hover_materials.orange,
+                crate::rubik::components::Face::Right => &hover_materials.red,
+                crate::rubik::components::Face::Front => &hover_materials.green,
+                crate::rubik::components::Face::Back => &hover_materials.blue,
+            };
+            *material = MeshMaterial3d(hover_mat.clone());
+            commands.entity(entity).insert(HandHovered);
         }
     }
 }

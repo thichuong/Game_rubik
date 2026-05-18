@@ -12,28 +12,40 @@ except ImportError as e:
 
 def detect_gesture(landmarks, w, h):
     """
-    Detect whether the gesture is index pointing (2) or whole hand (1).
-    Index pointing is when only the index finger is extended.
-    Whole hand is when multiple fingers are extended or as a fallback.
+    Detect gesture using ultra-fast, direct Y-coordinate comparisons:
+    - Gesture 1 (Open Hand): index, middle, ring, and pinky are all extended. Used to rotate the entire cube.
+    - Gesture 2 (Index Extended, others closed): index is extended, middle, ring, pinky are closed. Used to hover select a cubie face.
+    - Gesture 3 (Index Folded, others closed): index is folded, middle, ring, pinky are closed. Used to swipe drag.
+    - Gesture 0 (Idle): fallback/idle, avoids overlapping gesture confusion.
     """
-    # 8 (INDEX_TIP) vs 6 (INDEX_PIP)
+    # Direct Y comparison (extremely fast, zero allocation, zero math overhead)
     index_extended = landmarks[8].y < landmarks[6].y
     middle_extended = landmarks[12].y < landmarks[10].y
     ring_extended = landmarks[16].y < landmarks[14].y
     pinky_extended = landmarks[20].y < landmarks[18].y
 
-    extended_count = sum([index_extended, middle_extended, ring_extended, pinky_extended])
+    # Check if other fingers (excluding index) are completely closed/folded
+    other_closed = (not middle_extended) and (not ring_extended) and (not pinky_extended)
 
-    if index_extended and extended_count == 1:
-        # Index finger pointing (Gesture 2)
-        # Cursor position is at the fingertip
-        return 2, landmarks[8].x * w, landmarks[8].y * h
-    else:
-        # Whole hand / Palm (Gesture 1)
-        # Cursor position is the palm center: average of wrist (0), index MCP (5), middle MCP (9), pinky MCP (17)
-        cx = (landmarks[0].x + landmarks[5].x + landmarks[9].x + landmarks[17].x) / 4.0 * w
-        cy = (landmarks[0].y + landmarks[5].y + landmarks[9].y + landmarks[17].y) / 4.0 * h
+    # 1. Gesture 1: Open Hand / Whole Hand (All 4 fingers are fully extended) -> Rotate entire Rubik's cube
+    if index_extended and middle_extended and ring_extended and pinky_extended:
+        # Open Hand - Palm center
+        cx = (landmarks[0].x + landmarks[5].x + landmarks[9].x + landmarks[17].x) * 0.25 * w
+        cy = (landmarks[0].y + landmarks[5].y + landmarks[9].y + landmarks[17].y) * 0.25 * h
         return 1, cx, cy
+
+    # 2. Single finger controls for face rotation (Only index finger active, others must be closed)
+    elif other_closed:
+        if index_extended:
+            # Gesture 2: Index Extended, others closed -> Hover select face
+            return 2, landmarks[8].x * w, landmarks[8].y * h
+        else:
+            # Gesture 3: Index Folded, others closed -> Swipe drag rotation
+            return 3, landmarks[8].x * w, landmarks[8].y * h
+
+    # 3. Fallback / Idle (Gesture 0) - Disables overlapping "half-open, half-folded" confusions
+    else:
+        return 0, landmarks[0].x * w, landmarks[0].y * h
 
 def main():
     # Initialize MediaPipe Hands with max_num_hands=2
@@ -53,6 +65,10 @@ def main():
         sys.stderr.write("Error: Could not open webcam\n")
         sys.stderr.flush()
         sys.exit(1)
+
+    # Set camera resolution to an optimized, standard speed (640x480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     # Warm up camera
     cap.read()
@@ -115,8 +131,13 @@ def main():
                         mp_drawing.DrawingSpec(color=conn_color, thickness=2, circle_radius=2)
                     )
 
+            # Resize the preview frame to 320x240 to reduce IPC bandwidth and rendering load
+            # This cuts down data size by 4x, drastically increasing performance
+            preview_w, preview_h = 320, 240
+            preview_frame = cv2.resize(frame, (preview_w, preview_h))
+
             # Convert to RGBA for direct Bevy UI rendering
-            frame_rgba = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+            frame_rgba = cv2.cvtColor(preview_frame, cv2.COLOR_BGR2RGBA)
             frame_bytes = frame_rgba.tobytes()
             frame_len = len(frame_bytes)
 
@@ -125,7 +146,7 @@ def main():
             # Format: '<4sIIIB4s'
             global_header = b'HAND'
             hands_count = len(detected_hands)
-            metadata_global = struct.pack('<4sIIIB4s', global_header, w, h, frame_len, hands_count, b'\x00' * 4)
+            metadata_global = struct.pack('<4sIIIB4s', global_header, preview_w, preview_h, frame_len, hands_count, b'\x00' * 4)
 
             try:
                 stdout.write(metadata_global)
@@ -133,12 +154,16 @@ def main():
                 # 2. Hand Data Block: 268 bytes per hand
                 # Format: '<BBff63f6s' -> handedness (u8), gesture_type (u8), cursor_x (f32), cursor_y (f32), landmarks (63f), reserved (6s)
                 for hand in detected_hands:
+                    # Map the cursor coordinates to the preview frame size for Rust consistency
+                    mapped_cursor_x = (hand['cursor_x'] / w) * preview_w
+                    mapped_cursor_y = (hand['cursor_y'] / h) * preview_h
+
                     hand_block = struct.pack(
                         '<BBff63f6s',
                         hand['handedness'],
                         hand['gesture_type'],
-                        hand['cursor_x'],
-                        hand['cursor_y'],
+                        mapped_cursor_x,
+                        mapped_cursor_y,
                         *hand['landmarks'],
                         b'\x00' * 6
                     )
