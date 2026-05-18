@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-opencv = { version = "0.98.2" }
+# OpenCV dependency removed to eliminate system-level dynamic linking overhead and improve build reliability.

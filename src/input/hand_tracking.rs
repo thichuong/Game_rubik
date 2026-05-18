@@ -40,11 +40,6 @@ impl Drop for HandTrackerProcess {
 #[derive(Resource)]
 pub struct HandTrackingEnabled(pub bool);
 
-#[derive(Resource, Default)]
-pub struct HandTrackingStateResource {
-    pub hands: Vec<hand_tracker::TrackerHand>,
-}
-
 #[derive(Default, Clone, Copy)]
 pub struct SingleHandDragState {
     pub start_face: Option<(Entity, Vec3, Vec3)>, // (Entity, normal, hit_point)
@@ -60,7 +55,6 @@ pub struct HandDragState {
 impl Plugin for HandTrackingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(HandTrackingEnabled(false))
-            .insert_resource(HandTrackingStateResource::default())
             .insert_resource(HandDragState::default())
             .add_message::<HandRotationEvent>()
             .add_message::<CameraFrameEvent>()
@@ -113,7 +107,6 @@ fn setup_camera_listener(mut commands: Commands) {
 fn receive_hand_tracking(
     receiver: Option<Res<HandTrackingReceiver>>,
     enabled: Res<HandTrackingEnabled>,
-    mut hands_state: ResMut<HandTrackingStateResource>,
     mut drag_state: ResMut<HandDragState>,
     mut rotation_queue: ResMut<RotationQueue>,
     mut rot_events: MessageWriter<HandRotationEvent>,
@@ -152,11 +145,9 @@ fn receive_hand_tracking(
         height: data.height,
     });
 
-    // Store latest hands state for 3D visual rendering
-    hands_state.hands = data.hands;
+    let hands = &data.hands;
 
     if enabled.0 {
-        let hands = &hands_state.hands;
         let mut left_active = false;
         let mut right_active = false;
 

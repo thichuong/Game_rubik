@@ -1,31 +1,17 @@
-use opencv::{
-    Result,
-    core::{self},
-};
 use std::io::{BufReader, Read};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-
-/// A 3D landmark point
-#[derive(Clone, Copy, Debug)]
-pub struct Landmark3d {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
 
 /// Upgraded structured hand data parsed from the tracker thread
 pub struct TrackerHand {
     /// Handedness: 0 = Left, 1 = Right
     pub handedness: u8,
-    /// Gesture: 1 = Whole Hand (rotation), 2 = Index Pointing (interaction)
+    /// Gesture: 1 = Whole Hand (rotation), 2 = Index Pointing (interaction), 3 = Index Folded (swipe)
     pub gesture_type: u8,
     /// Smoothed screen cursor X/Y coordinates
     pub cursor: (f32, f32),
     /// Velocity/swipe delta if active
     pub delta: Option<(f32, f32)>,
-    /// 21 3D landmarks mapped relative to camera space
-    pub landmarks: Vec<Landmark3d>,
 }
 
 /// Data sent from tracker thread to the game
@@ -38,16 +24,8 @@ pub struct TrackerData {
     pub height: u32,
 }
 
-/// Configuration for skin detection and swipe tracking
-pub struct SkinConfig {
-    pub h_min: f64,
-    pub h_max: f64,
-    pub s_min: f64,
-    pub s_max: f64,
-    pub v_min: f64,
-    pub v_max: f64,
-    /// Minimum contour area to be considered a hand
-    pub min_contour_area: f64,
+/// Configuration for swipe smoothing and tracking parameters
+pub struct TrackerConfig {
     /// Sensitivity multiplier for rotation delta
     pub sensitivity: f32,
     /// EMA alpha for centroid smoothing (lower = smoother, higher = more responsive)
@@ -58,16 +36,9 @@ pub struct SkinConfig {
     pub lost_timeout: u32,
 }
 
-impl Default for SkinConfig {
+impl Default for TrackerConfig {
     fn default() -> Self {
         Self {
-            h_min: 0.0,
-            h_max: 25.0,
-            s_min: 40.0,
-            s_max: 170.0,
-            v_min: 60.0,
-            v_max: 255.0,
-            min_contour_area: 5000.0,
             sensitivity: 1.7, // Reduced sensitivity for more deliberate cursor control
             ema_alpha: 0.65, // Balanced smoothing filter to make the cursor glide smoothly without lag
             dead_zone: 2.0,  // Increased dead zone to eliminate small finger micro-jitters
@@ -108,19 +79,18 @@ impl HandTrackingState {
 /// 1. Spawns Python virtual environment running MediaPipe Hands (max_num_hands=2)
 /// 2. Reads structured binary packets from stdout
 /// 3. EMA smooths hand cursors and computes swipe deltas separately for left/right hands
-/// 4. Decodes 3D landmarks for rendering holographic hands
-/// 5. Converts frame to RGBA and returns to Bevy
+/// 4. Converts frame to RGBA and returns to Bevy
 pub struct HandTracker {
     child: Arc<Mutex<Option<Child>>>,
     reader: BufReader<std::process::ChildStdout>,
-    config: SkinConfig,
+    config: TrackerConfig,
     left_hand: HandTrackingState,
     right_hand: HandTrackingState,
 }
 
 impl HandTracker {
     /// Create a new hand tracker, spawning the Python MediaPipe worker
-    pub fn new() -> Result<(Self, Arc<Mutex<Option<Child>>>)> {
+    pub fn new() -> std::io::Result<(Self, Arc<Mutex<Option<Child>>>)> {
         let python_path = "hand_tracker/.venv/bin/python";
         let script_path = "hand_tracker/hand_tracker.py";
 
@@ -130,15 +100,13 @@ impl HandTracker {
             .stderr(Stdio::inherit())
             .spawn()
             .map_err(|e| {
-                opencv::Error::new(
-                    core::StsError,
-                    format!("Failed to spawn Python MediaPipe process: {e}"),
-                )
+                std::io::Error::other(format!("Failed to spawn Python MediaPipe process: {e}"))
             })?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            opencv::Error::new(core::StsError, "Failed to capture Python stdout stream")
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("Failed to capture Python stdout stream"))?;
         let reader = BufReader::new(stdout);
 
         let shared_child = Arc::new(Mutex::new(Some(child)));
@@ -147,7 +115,7 @@ impl HandTracker {
             Self {
                 child: shared_child.clone(),
                 reader,
-                config: SkinConfig::default(),
+                config: TrackerConfig::default(),
                 left_hand: HandTrackingState::default(),
                 right_hand: HandTrackingState::default(),
             },
@@ -164,7 +132,7 @@ impl HandTracker {
     }
 
     /// Process one camera frame and return tracking data.
-    pub fn get_delta(&mut self) -> Result<Option<TrackerData>> {
+    pub fn get_delta(&mut self) -> std::io::Result<Option<TrackerData>> {
         // Global Header: 21 bytes:
         // 4 bytes: "HAND"
         // 4 bytes: width (u32)
@@ -174,15 +142,14 @@ impl HandTracker {
         // 4 bytes: reserved (padding)
         let mut global_header = [0u8; 21];
         if let Err(e) = self.reader.read_exact(&mut global_header) {
-            return Err(opencv::Error::new(
-                core::StsError,
-                format!("Failed to read packet header: {e}"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "Failed to read packet header: {e}"
+            )));
         }
 
         if &global_header[0..4] != b"HAND" {
-            return Err(opencv::Error::new(
-                core::StsError,
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
                 "Invalid packet header: expected 'HAND'",
             ));
         }
@@ -197,10 +164,9 @@ impl HandTracker {
         for _ in 0..hands_count {
             let mut hand_block = [0u8; 268];
             if let Err(e) = self.reader.read_exact(&mut hand_block) {
-                return Err(opencv::Error::new(
-                    core::StsError,
-                    format!("Failed to read hand block: {e}"),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "Failed to read hand block: {e}"
+                )));
             }
 
             let handedness = hand_block[0];
@@ -208,19 +174,8 @@ impl HandTracker {
             let cursor_x = read_f32_le(&hand_block[2..6]);
             let cursor_y = read_f32_le(&hand_block[6..10]);
 
-            // Parse 21 landmarks (each is 3 * f32 = 12 bytes, total 252 bytes)
-            let mut landmarks = Vec::with_capacity(21);
-            for i in 0..21 {
-                let start = 10 + i * 12;
-                let lx = read_f32_le(&hand_block[start..start + 4]);
-                let ly = read_f32_le(&hand_block[start + 4..start + 8]);
-                let lz = read_f32_le(&hand_block[start + 8..start + 12]);
-                landmarks.push(Landmark3d {
-                    x: lx,
-                    y: ly,
-                    z: lz,
-                });
-            }
+            // Note: 21 3D landmarks (252 bytes from byte index 10 to 262) and 6 reserved bytes (262 to 268)
+            // are skipped to avoid heap allocations and improve performance, as they are not used by the game.
 
             // Smooth the active cursor position using EMA
             let state = if handedness == 0 {
@@ -261,7 +216,6 @@ impl HandTracker {
                 gesture_type,
                 cursor: (sx, sy),
                 delta,
-                landmarks,
             });
         }
 
@@ -286,10 +240,9 @@ impl HandTracker {
         // Read the raw frame bytes
         let mut frame_rgba = vec![0u8; frame_len];
         if let Err(e) = self.reader.read_exact(&mut frame_rgba) {
-            return Err(opencv::Error::new(
-                core::StsError,
-                format!("Failed to read frame bytes: {e}"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "Failed to read frame bytes: {e}"
+            )));
         }
 
         Ok(Some(TrackerData {
