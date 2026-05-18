@@ -3,7 +3,6 @@ mod environment;
 mod events;
 mod input;
 mod rubik;
-mod solver;
 mod ui;
 
 use bevy::prelude::*;
@@ -14,7 +13,7 @@ use environment::EnvironmentPlugin;
 use events::{ResetCameraEvent, SolveByStepsEvent};
 use input::InputPlugin;
 use rubik::RubikPlugin;
-use solver::SolverPlugin;
+use rubik_solver::SolverPlugin;
 use ui::UiPlugin;
 
 fn main() {

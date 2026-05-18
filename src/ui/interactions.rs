@@ -3,8 +3,6 @@ use crate::events::{CameraFrameEvent, ResetCameraEvent};
 use crate::input::hand_tracking::HandTrackingEnabled;
 use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove, RubikCube};
 use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikSize, RubikSkin};
-use crate::solver::helpers;
-use crate::solver::resources::{SolverResource, StepByStepSolution};
 use crate::ui::components::{
     CameraFeedImage, CameraTrackingButton, CameraTrackingText, CloseButton, EnvControl, EnvList,
     EnvToggleButton, ExitButton, MappingControl, MappingList, MappingOrderText,
@@ -18,6 +16,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
 use rand::RngExt;
+use rubik_solver::{SolverResource, StepByStepSolution, helpers};
 use std::fmt::Write;
 
 pub type InteractionQuery<'w, 's, T> = Query<
@@ -111,87 +110,39 @@ pub fn handle_solve_button(
                 solution.active = true;
                 solution.moves.clear();
                 solution.current_step = 0;
+                solution.failed = false;
 
                 let size = rubik_size.size;
 
                 if size == 3 {
                     let state_str = helpers::get_cube_state(&faces, &cube_query, *face_mapping);
-
-                    let mut solved_with_kewb = false;
-                    if let Ok(face_cube) = kewb::FaceCube::try_from(state_str.as_str()) {
-                        if let Ok(cubie_cube) = kewb::CubieCube::try_from(&face_cube) {
-                            let mut solver = kewb::Solver::new(&solver_res.table, 23, None);
-                            if let Some(sol) = solver.solve(cubie_cube) {
-                                solution.moves = sol
-                                    .to_string()
-                                    .split_whitespace()
-                                    .map(String::from)
-                                    .collect();
-                                solved_with_kewb = true;
-                            }
-                        }
-                    }
-
-                    if !solved_with_kewb && !history.done.is_empty() {
-                        let inverse_moves: Vec<RotationMove> =
-                            history.done.iter().rev().map(|m| m.inverse()).collect();
-                        let optimized = helpers::optimize_moves(&inverse_moves);
-                        solution.moves = optimized
-                            .iter()
-                            .map(|m| {
-                                helpers::physical_move_to_logical_string_any(
-                                    *m,
-                                    size,
-                                    *face_mapping,
-                                )
-                            })
-                            .collect();
+                    if let Some(moves) = rubik_solver::solve_cube(&state_str, &solver_res.table) {
+                        solution.moves = moves;
+                    } else {
+                        solution.failed = true;
                     }
                 } else if size == 2 {
-                    let mut solved_with_kewb = false;
                     if let Some(state_str) =
                         helpers::get_cube_state_for_size(size, &faces, &cube_query, *face_mapping)
                     {
-                        if let Ok(face_cube) = kewb::FaceCube::try_from(state_str.as_str()) {
-                            if let Ok(cubie_cube) = kewb::CubieCube::try_from(&face_cube) {
-                                let mut solver = kewb::Solver::new(&solver_res.table, 23, None);
-                                if let Some(sol) = solver.solve(cubie_cube) {
-                                    solution.moves = sol
-                                        .to_string()
-                                        .split_whitespace()
-                                        .map(String::from)
-                                        .collect();
-                                    solved_with_kewb = true;
-                                }
-                            }
+                        if let Some(moves) = rubik_solver::solve_cube(&state_str, &solver_res.table)
+                        {
+                            solution.moves = moves;
+                        } else {
+                            solution.failed = true;
                         }
+                    } else {
+                        solution.failed = true;
                     }
+                } else {
+                    solution.failed = true;
+                }
 
-                    if !solved_with_kewb && !history.done.is_empty() {
-                        let inverse_moves: Vec<RotationMove> =
-                            history.done.iter().rev().map(|m| m.inverse()).collect();
-                        let optimized = helpers::optimize_moves(&inverse_moves);
-                        solution.moves = optimized
-                            .iter()
-                            .map(|m| {
-                                helpers::physical_move_to_logical_string_any(
-                                    *m,
-                                    size,
-                                    *face_mapping,
-                                )
-                            })
-                            .collect();
-                    }
-                } else if !history.done.is_empty() {
-                    let inverse_moves: Vec<RotationMove> =
-                        history.done.iter().rev().map(|m| m.inverse()).collect();
-                    let optimized = helpers::optimize_moves(&inverse_moves);
-                    solution.moves = optimized
-                        .iter()
-                        .map(|m| {
-                            helpers::physical_move_to_logical_string_any(*m, size, *face_mapping)
-                        })
-                        .collect();
+                if solution.failed {
+                    // Keep active as true to show the failure panel
+                } else if solution.moves.is_empty() {
+                    // No moves and not failed means it's already solved -> hide panel
+                    solution.active = false;
                 }
 
                 // Clear done and undone history upon solving to prevent conflicts
@@ -254,32 +205,34 @@ pub fn update_solution_panel(
     mut text: Single<&mut Text, With<StepText>>,
 ) {
     if solution.is_changed() {
-        panel.display = if solution.active {
+        panel.display = if solution.active && (!solution.moves.is_empty() || solution.failed) {
             Display::Flex
         } else {
             Display::None
         };
 
         if solution.active {
-            if solution.moves.is_empty() {
-                text.0 = "Already solved or no moves recorded!".to_string();
-            } else if solution.current_step >= solution.moves.len() {
-                text.0 = "Solved!".to_string();
-            } else {
-                let mut full_text = String::new();
-                for (i, m) in solution.moves.iter().enumerate() {
-                    if i == solution.current_step {
-                        let _ = write!(full_text, " >>{m}<< ");
-                    } else {
-                        let _ = write!(full_text, " {m} ");
+            if solution.failed {
+                text.0 = "Failed to solve! (Invalid state)".to_string();
+            } else if !solution.moves.is_empty() {
+                if solution.current_step >= solution.moves.len() {
+                    text.0 = "Solved!".to_string();
+                } else {
+                    let mut full_text = String::new();
+                    for (i, m) in solution.moves.iter().enumerate() {
+                        if i == solution.current_step {
+                            let _ = write!(full_text, " >>{m}<< ");
+                        } else {
+                            let _ = write!(full_text, " {m} ");
+                        }
                     }
+                    text.0 = format!(
+                        "Step {}/{}\n\n{}",
+                        solution.current_step + 1,
+                        solution.moves.len(),
+                        full_text
+                    );
                 }
-                text.0 = format!(
-                    "Step {}/{}\n\n{}",
-                    solution.current_step + 1,
-                    solution.moves.len(),
-                    full_text
-                );
             }
         }
     }

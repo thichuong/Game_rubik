@@ -11,4 +11,5 @@ pub struct StepByStepSolution {
     pub moves: Vec<String>,
     pub current_step: usize,
     pub active: bool,
+    pub failed: bool,
 }

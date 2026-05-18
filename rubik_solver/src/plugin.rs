@@ -1,8 +1,5 @@
-pub mod helpers;
-pub mod resources;
-
+use crate::resources::{SolverResource, StepByStepSolution};
 use bevy::prelude::*;
-use resources::SolverResource;
 
 pub struct SolverPlugin;
 
@@ -11,6 +8,6 @@ impl Plugin for SolverPlugin {
         app.insert_resource(SolverResource {
             table: kewb::DataTable::default(),
         })
-        .init_resource::<resources::StepByStepSolution>();
+        .init_resource::<StepByStepSolution>();
     }
 }

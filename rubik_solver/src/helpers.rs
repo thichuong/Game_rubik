@@ -1,5 +1,4 @@
-use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove};
-use crate::rubik::resources::FaceMapping;
+use crate::core::{CubieFace, Direction, Face, FaceMapping, RotationAxis, RotationMove};
 use bevy::prelude::*;
 
 pub fn get_cube_state(
@@ -68,7 +67,6 @@ fn find_facelet_color_at(
     None
 }
 
-#[allow(dead_code)]
 pub fn solution_to_moves(solution: &str, size: i32, mapping: FaceMapping) -> Vec<RotationMove> {
     let mut all_moves = Vec::new();
     for part in solution.split_whitespace() {
@@ -77,8 +75,6 @@ pub fn solution_to_moves(solution: &str, size: i32, mapping: FaceMapping) -> Vec
             continue;
         };
 
-        // Parse either the new internal slice representation (X{index}, Y{index}, Z{index})
-        // or the traditional outer face notations (U, D, L, R, F, B).
         let (axis, index, base_dir, remaining_str) = match first_char {
             'X' | 'Y' | 'Z' => {
                 let axis = match first_char {
@@ -156,13 +152,10 @@ pub fn solution_to_moves(solution: &str, size: i32, mapping: FaceMapping) -> Vec
     all_moves
 }
 
-/// Convert a `RotationMove` into a standard string representation, respecting the Rubik's cube size and `FaceMapping`.
-#[allow(dead_code)]
 pub fn move_to_string(m: RotationMove, size: i32, mapping: FaceMapping) -> String {
     mapping.physical_move_to_logic_string(m, size)
 }
 
-/// Retrieve the state for the Rubik solver, supporting both 3x3x3 (native) and 2x2x2 (mapped to virtual 3x3x3).
 pub fn get_cube_state_for_size(
     size: i32,
     faces: &Query<(&CubieFace, &GlobalTransform)>,
@@ -187,13 +180,11 @@ pub fn get_cube_state_for_size(
             let (phys_face, right_vec, down_vec) = mapping.get_face_config(logic_face);
             let normal = phys_face.normal();
 
-            // Set centers and edges to default face color
             let default_char = mapping.get_char_for_physical_color(phys_face);
             for i in [1, 3, 4, 5, 7] {
                 state[face_idx * 9 + i] = default_char;
             }
 
-            // Map 2x2x2 corners to 3x3x3 virtual corners
             for row in 0..2 {
                 for col in 0..2 {
                     #[allow(clippy::cast_precision_loss)]
@@ -205,11 +196,6 @@ pub fn get_cube_state_for_size(
                     if let Some(color) =
                         find_facelet_color_at(target_pos, normal, faces, cube_transform)
                     {
-                        // Mapping 2x2x2 coordinates to virtual 3x3x3 corners:
-                        // (row=0, col=0) -> 3x3x3 corner (row=0, col=0) i.e. index 0
-                        // (row=0, col=1) -> 3x3x3 corner (row=0, col=2) i.e. index 2
-                        // (row=1, col=0) -> 3x3x3 corner (row=2, col=0) i.e. index 6
-                        // (row=1, col=1) -> 3x3x3 corner (row=2, col=2) i.e. index 8
                         let virtual_row = row * 2;
                         let virtual_col = col * 2;
                         let virtual_idx = face_idx * 9 + virtual_row * 3 + virtual_col;
@@ -231,20 +217,16 @@ pub fn get_cube_state_for_size(
     }
 }
 
-/// Optimize a sequence of moves by cancelling out and merging adjacent/commutative rotations.
 pub fn optimize_moves(moves: &[RotationMove]) -> Vec<RotationMove> {
     let mut optimized: Vec<RotationMove> = Vec::new();
     for &mv in moves {
         let mut merged = false;
-        // Search backwards from the end of the stack for a mergeable move
         for i in (0..optimized.len()).rev() {
             let prev = optimized[i];
             if prev.axis != mv.axis {
-                // Met a blocker on a different axis, cannot commute past it. Stop searching.
                 break;
             }
             if prev.index == mv.index {
-                // Found a move on the same axis and slice. Merge them.
                 let last_val = match prev.direction {
                     Direction::Clockwise => 1,
                     Direction::CounterClockwise => -1,
@@ -256,7 +238,7 @@ pub fn optimize_moves(moves: &[RotationMove]) -> Vec<RotationMove> {
                 let total = (last_val + mv_val) % 4;
                 let total = if total < 0 { total + 4 } else { total };
 
-                optimized.remove(i); // Remove old move
+                optimized.remove(i);
 
                 match total {
                     1 => {
@@ -291,9 +273,7 @@ pub fn optimize_moves(moves: &[RotationMove]) -> Vec<RotationMove> {
                             },
                         );
                     }
-                    _ => {
-                        // 0, cancelled out completely, already removed so do nothing
-                    }
+                    _ => {}
                 }
                 merged = true;
                 break;
@@ -306,8 +286,6 @@ pub fn optimize_moves(moves: &[RotationMove]) -> Vec<RotationMove> {
     optimized
 }
 
-/// Convert any physical `RotationMove` into a logical string representation, respecting `FaceMapping` and cube size.
-/// This correctly maps internal slices (as "LX", "LY", "LZ" logic moves) and outer faces (as "U", "D", "R"...) dynamically.
 #[allow(clippy::similar_names)]
 pub fn physical_move_to_logical_string_any(
     m: RotationMove,
@@ -318,7 +296,6 @@ pub fn physical_move_to_logical_string_any(
     let d_normal = mapping.d_face.normal();
     let r_normal = f_normal.cross(d_normal);
 
-    // Logic axes vectors in physical space
     let v_x_logic = r_normal;
     let v_y_logic = -d_normal;
     let v_z_logic = f_normal;
@@ -351,9 +328,7 @@ pub fn physical_move_to_logical_string_any(
         (m.axis, m.index, m.direction)
     };
 
-    // Format as logical string representation
     if logic_index == size - 1 || logic_index == 0 {
-        // Outer face moves
         let base = match logic_axis {
             RotationAxis::X => {
                 if logic_index == size - 1 {
@@ -390,7 +365,6 @@ pub fn physical_move_to_logical_string_any(
             format!("{base}'")
         }
     } else {
-        // Inner slice moves
         let axis_char = match logic_axis {
             RotationAxis::X => "LX",
             RotationAxis::Y => "LY",
@@ -405,8 +379,6 @@ pub fn physical_move_to_logical_string_any(
     }
 }
 
-/// Convert any logical solution string (containing both outer face moves like "U", "D" and inner logic slice moves like "LX1", "LY2")
-/// back to physical `RotationMove`s, dynamically respecting the current `FaceMapping` and cube size.
 #[allow(clippy::too_many_lines, clippy::similar_names)]
 pub fn logical_string_to_physical_moves_any(
     solution: &str,
@@ -418,7 +390,6 @@ pub fn logical_string_to_physical_moves_any(
     let d_normal = mapping.d_face.normal();
     let r_normal = f_normal.cross(d_normal);
 
-    // Logic axes vectors in physical space
     let v_x_logic = r_normal;
     let v_y_logic = -d_normal;
     let v_z_logic = f_normal;
@@ -459,7 +430,6 @@ pub fn logical_string_to_physical_moves_any(
                         Direction::Clockwise
                     };
 
-                    // Map logic move to physical move
                     let v_logic = match logic_axis {
                         RotationAxis::X => v_x_logic,
                         RotationAxis::Y => v_y_logic,
@@ -515,7 +485,6 @@ pub fn logical_string_to_physical_moves_any(
             }
         }
 
-        // Fallback or traditional outer face notations (U, D, L, R, F, B) or old X/Y/Z notations
         let mut chars = part.chars();
         let Some(first_char) = chars.next() else {
             continue;

@@ -6,15 +6,15 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.18", features = ["default"] }
 bevy_resvg = "2.3.3"
-kewb = "0.4.3"
 rand = { version = "0.10.1", features = ["thread_rng"] }
 hand_tracker = { path = "hand_tracker" }
+rubik_solver = { path = "rubik_solver" }
 # bevy_mod_picking = "0.20" # If needed, but Bevy 0.15 has picking built-in
 # Note: As of my latest check, Bevy 0.15 is the stable target for modern picking.
 # If 0.18 is available, I will adjust, but 0.15 is safe for current features.
 
 [workspace]
-members = ["hand_tracker"]
+members = ["hand_tracker", "rubik_solver"]
 
 [profile.dev]
 opt-level = 1
