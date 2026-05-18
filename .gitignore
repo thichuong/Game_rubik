@@ -5,6 +5,7 @@ Cargo.lock
 # --- Python Virtual Environments & Packages ---
 .venv/
 hand_tracker/.venv/
+hand_tracker/.venv
 **/__pycache__/
 **/*.pyc
 **/*.pyo

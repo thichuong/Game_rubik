@@ -5,12 +5,32 @@ use opencv::{
 use std::io::{BufReader, Read};
 use std::process::{Child, Command, Stdio};
 
+/// A 3D landmark point
+#[derive(Clone, Copy, Debug)]
+pub struct Landmark3d {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+/// Upgraded structured hand data parsed from the tracker thread
+pub struct TrackerHand {
+    /// Handedness: 0 = Left, 1 = Right
+    pub handedness: u8,
+    /// Gesture: 1 = Whole Hand (rotation), 2 = Index Pointing (interaction)
+    pub gesture_type: u8,
+    /// Smoothed screen cursor X/Y coordinates
+    pub cursor: (f32, f32),
+    /// Velocity/swipe delta if active
+    pub delta: Option<(f32, f32)>,
+    /// 21 3D landmarks mapped relative to camera space
+    pub landmarks: Vec<Landmark3d>,
+}
+
 /// Data sent from tracker thread to the game
 pub struct TrackerData {
-    /// Rotation delta if the hand is actively swiping
-    pub delta: Option<(f32, f32)>,
-    /// Smoothed hand center position (if detected)
-    pub hand_center: Option<(f32, f32)>,
+    /// List of tracked hands (up to 2)
+    pub hands: Vec<TrackerHand>,
     /// Camera frame in RGBA format for UI display
     pub frame_rgba: Vec<u8>,
     pub width: u32,
@@ -55,22 +75,46 @@ impl Default for SkinConfig {
     }
 }
 
-/// Hand tracker using Google ML Kit / MediaPipe via a Python subprocess.
-///
-/// Pipeline:
-/// 1. Spawns Python virtual environment running MediaPipe Hands
-/// 2. Reads structured binary packets from stdout
-/// 3. EMA smooths hand center and computes swipe delta
-/// 4. Converts frame to RGBA and returns to Bevy
-pub struct HandTracker {
-    child: Child,
-    reader: BufReader<std::process::ChildStdout>,
-    config: SkinConfig,
+/// Individual hand state tracking variables (EMA filter + timeout)
+#[derive(Default)]
+struct HandTrackingState {
     smoothed_cx: Option<f32>,
     smoothed_cy: Option<f32>,
     prev_cx: Option<f32>,
     prev_cy: Option<f32>,
     lost_frames: u32,
+}
+
+impl HandTrackingState {
+    fn reset(&mut self) {
+        self.smoothed_cx = None;
+        self.smoothed_cy = None;
+        self.prev_cx = None;
+        self.prev_cy = None;
+    }
+
+    fn handle_lost_frame(&mut self, timeout: u32) {
+        self.lost_frames += 1;
+        if self.lost_frames >= timeout {
+            self.reset();
+        }
+    }
+}
+
+/// Hand tracker using Google MediaPipe Hands via a Python subprocess.
+///
+/// Pipeline:
+/// 1. Spawns Python virtual environment running MediaPipe Hands (max_num_hands=2)
+/// 2. Reads structured binary packets from stdout
+/// 3. EMA smooths hand cursors and computes swipe deltas separately for left/right hands
+/// 4. Decodes 3D landmarks for rendering holographic hands
+/// 5. Converts frame to RGBA and returns to Bevy
+pub struct HandTracker {
+    child: Child,
+    reader: BufReader<std::process::ChildStdout>,
+    config: SkinConfig,
+    left_hand: HandTrackingState,
+    right_hand: HandTrackingState,
 }
 
 impl HandTracker {
@@ -100,11 +144,8 @@ impl HandTracker {
             child,
             reader,
             config: SkinConfig::default(),
-            smoothed_cx: None,
-            smoothed_cy: None,
-            prev_cx: None,
-            prev_cy: None,
-            lost_frames: 0,
+            left_hand: HandTrackingState::default(),
+            right_hand: HandTrackingState::default(),
         })
     }
 
@@ -116,72 +157,84 @@ impl HandTracker {
         }
     }
 
-    /// Reset all tracking state (called when hand is lost for too long)
-    fn reset_tracking(&mut self) {
-        self.smoothed_cx = None;
-        self.smoothed_cy = None;
-        self.prev_cx = None;
-        self.prev_cy = None;
-    }
-
     /// Process one camera frame and return tracking data.
     pub fn get_delta(&mut self) -> Result<Option<TrackerData>> {
-        // Header is 25 bytes:
+        // Global Header: 21 bytes:
         // 4 bytes: "HAND"
         // 4 bytes: width (u32)
         // 4 bytes: height (u32)
-        // 1 byte: has_center (u8)
-        // 4 bytes: cx (f32)
-        // 4 bytes: cy (f32)
         // 4 bytes: frame_len (u32)
-        let mut header = [0u8; 25];
-        if let Err(e) = self.reader.read_exact(&mut header) {
+        // 1 byte: hands_count (u8)
+        // 4 bytes: reserved (padding)
+        let mut global_header = [0u8; 21];
+        if let Err(e) = self.reader.read_exact(&mut global_header) {
             return Err(opencv::Error::new(
                 core::StsError,
                 format!("Failed to read packet header: {e}"),
             ));
         }
 
-        if &header[0..4] != b"HAND" {
+        if &global_header[0..4] != b"HAND" {
             return Err(opencv::Error::new(
                 core::StsError,
                 "Invalid packet header: expected 'HAND'",
             ));
         }
 
-        let w = read_u32_le(&header[4..8]);
-        let h = read_u32_le(&header[8..12]);
-        let has_center = header[12] != 0;
-        let cx = read_f32_le(&header[13..17]);
-        let cy = read_f32_le(&header[17..21]);
-        let frame_len = read_u32_le(&header[21..25]) as usize;
+        let w = read_u32_le(&global_header[4..8]);
+        let h = read_u32_le(&global_header[8..12]);
+        let frame_len = read_u32_le(&global_header[12..16]) as usize;
+        let hands_count = global_header[16] as usize;
 
-        // Read the raw frame bytes
-        let mut frame_rgba = vec![0u8; frame_len];
-        if let Err(e) = self.reader.read_exact(&mut frame_rgba) {
-            return Err(opencv::Error::new(
-                core::StsError,
-                format!("Failed to read frame bytes: {e}"),
-            ));
-        }
+        // Read hand blocks (268 bytes per hand)
+        let mut hands = Vec::with_capacity(hands_count);
+        for _ in 0..hands_count {
+            let mut hand_block = [0u8; 268];
+            if let Err(e) = self.reader.read_exact(&mut hand_block) {
+                return Err(opencv::Error::new(
+                    core::StsError,
+                    format!("Failed to read hand block: {e}"),
+                ));
+            }
 
-        // Compute centroid and delta
-        let (hand_center, delta) = if has_center {
-            self.lost_frames = 0;
+            let handedness = hand_block[0];
+            let gesture_type = hand_block[1];
+            let cursor_x = read_f32_le(&hand_block[2..6]);
+            let cursor_y = read_f32_le(&hand_block[6..10]);
 
-            // EMA smooth the centroid
+            // Parse 21 landmarks (each is 3 * f32 = 12 bytes, total 252 bytes)
+            let mut landmarks = Vec::with_capacity(21);
+            for i in 0..21 {
+                let start = 10 + i * 12;
+                let lx = read_f32_le(&hand_block[start..start + 4]);
+                let ly = read_f32_le(&hand_block[start + 4..start + 8]);
+                let lz = read_f32_le(&hand_block[start + 8..start + 12]);
+                landmarks.push(Landmark3d {
+                    x: lx,
+                    y: ly,
+                    z: lz,
+                });
+            }
+
+            // Smooth the active cursor position using EMA
+            let state = if handedness == 0 {
+                &mut self.left_hand
+            } else {
+                &mut self.right_hand
+            };
+            state.lost_frames = 0;
+
             let alpha = self.config.ema_alpha;
-            let sx = Self::ema(self.smoothed_cx, cx, alpha);
-            let sy = Self::ema(self.smoothed_cy, cy, alpha);
-            self.smoothed_cx = Some(sx);
-            self.smoothed_cy = Some(sy);
+            let sx = Self::ema(state.smoothed_cx, cursor_x, alpha);
+            let sy = Self::ema(state.smoothed_cy, cursor_y, alpha);
+            state.smoothed_cx = Some(sx);
+            state.smoothed_cy = Some(sy);
 
             // Compute delta from previous smoothed position
-            let delta = if let (Some(px), Some(py)) = (self.prev_cx, self.prev_cy) {
+            let delta = if let (Some(px), Some(py)) = (state.prev_cx, state.prev_cy) {
                 let dx = sx - px;
                 let dy = sy - py;
 
-                // Dead zone: ignore micro-movements
                 let mag_sq = dx * dx + dy * dy;
                 let dz_sq = self.config.dead_zone * self.config.dead_zone;
                 if mag_sq > dz_sq {
@@ -194,30 +247,51 @@ impl HandTracker {
                 None
             };
 
-            self.prev_cx = Some(sx);
-            self.prev_cy = Some(sy);
+            state.prev_cx = Some(sx);
+            state.prev_cy = Some(sy);
 
-            (Some((sx, sy)), delta)
-        } else {
-            self.handle_lost_frame();
-            (None, None)
-        };
+            hands.push(TrackerHand {
+                handedness,
+                gesture_type,
+                cursor: (sx, sy),
+                delta,
+                landmarks,
+            });
+        }
+
+        // Handle lost frames for hands that were not detected in this packet
+        let mut left_detected = false;
+        let mut right_detected = false;
+        for hand in &hands {
+            if hand.handedness == 0 {
+                left_detected = true;
+            } else {
+                right_detected = true;
+            }
+        }
+
+        if !left_detected {
+            self.left_hand.handle_lost_frame(self.config.lost_timeout);
+        }
+        if !right_detected {
+            self.right_hand.handle_lost_frame(self.config.lost_timeout);
+        }
+
+        // Read the raw frame bytes
+        let mut frame_rgba = vec![0u8; frame_len];
+        if let Err(e) = self.reader.read_exact(&mut frame_rgba) {
+            return Err(opencv::Error::new(
+                core::StsError,
+                format!("Failed to read frame bytes: {e}"),
+            ));
+        }
 
         Ok(Some(TrackerData {
-            delta,
-            hand_center,
+            hands,
             frame_rgba,
             width: w,
             height: h,
         }))
-    }
-
-    /// Handle a frame where no hand was detected
-    fn handle_lost_frame(&mut self) {
-        self.lost_frames += 1;
-        if self.lost_frames >= self.config.lost_timeout {
-            self.reset_tracking();
-        }
     }
 }
 
