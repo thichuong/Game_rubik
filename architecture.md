@@ -40,8 +40,8 @@ graph TD
         Orbit["OrbitCamera Component"]
     end
 
-    subgraph HandTracking ["✋ Hand Tracking (OpenCV)"]
-        HandTrackerLib["hand_tracker (Native Rust OpenCV)"]
+    subgraph HandTracking ["✋ Hand Tracking (MediaPipe IPC)"]
+        HandTrackerLib["hand_tracker (Pure Rust IPC Reader)"]
         HandTrackingPlugin["HandTrackingPlugin"]
         TrackerData["CameraFrameEvent & HandRotationEvent"]
     end
@@ -151,11 +151,14 @@ Handles standard mouse clicking, camera control interception, dragging gestures,
 *   **Drag Vector Calculation**: On cursor release, projects the current cursor ray onto the plane of the initially clicked face. The resulting swipe vector dictates the orientation cross-product to determine which 3D axis is rotated.
 *   **Center Protection constraint**: Rotations with `index == 0` (center slices) are explicitly blocked from mouse interaction to prevent axis-shifting disorientation, keeping controls extremely intuitive.
 *   **Camera Hand Tracking (`hand_tracker` & `hand_tracking.rs`)**:
-    *   Utilizes a dedicated workspace crate (`hand_tracker`) powered by `opencv` (Rust bindings) to read real-time webcam frames.
-    *   Applies Grayscale, Gaussian Blur, Frame Differencing, and Contour Area moments to calculate the centroid of the hand movement.
+    *   Utilizes a dedicated workspace crate (`hand_tracker`) communicating with a lightweight background Python subprocess via standard I/O streams (`std::process::Child` piping). This eliminates complex OpenCV C++ bindings, making compilation fast and robust.
+    *   The Python worker runs **Google MediaPipe Hands** to detect 21 3D joint landmarks and perform ultra-fast gesture classification (Gesture 1: Open Hand for cube rotation, Gesture 2: Index Extended for hover selection, Gesture 3: Index Folded for swipe face rotation).
+    *   In the Rust host side, landmarks data is skipped during packet parsing to avoid unnecessary heap allocations in the game loop.
+    *   Calculates moving average smoothing using an EMA filter (`alpha = 0.65`) and filters micro-jitters with a dead-zone threshold (`dead_zone = 2.0`).
     *   Runs seamlessly on a separate background thread communicating via `std::sync::mpsc::channel`.
     *   Pushes `HandRotationEvent` mapping 2D hand movement deltas to 3D cube rotations.
     *   Pushes `CameraFrameEvent` carrying RGBA byte arrays to update the UI Camera view dynamically without blocking the main render loop.
+    *   Employs a **Drain Channel** technique in the Bevy main thread to process only the latest tracking packet, completely eliminating I/O latency.
 
 ### 3. Solver Module (`src/solver`)
 Bridges the physical 3D scene representation to the abstract mathematical two-phase algorithm.

@@ -9,7 +9,7 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 - **🎮 Highly Interactive Controls**:
   - Smooth **Orbit Camera** with right-click drag navigation.
   - Precise mouse **Raycast Pick & Slice Rotation** (left-click and drag to rotate the exact slice you touch).
-  - **✨ NEW: Real-Time Hand Tracking**: Control the entire Rubik's cube rotation just by waving your hand in front of your webcam! Powered by OpenCV native Rust bindings.
+  - **✨ NEW: Real-Time Hand Tracking**: Control the entire Rubik's cube rotation and rotate individual slices using intuitive hand gestures in front of your webcam! Powered by Google MediaPipe Hands running in a lightweight Python background worker, synchronized with Bevy via real-time standard I/O piping (eliminating complex OpenCV C++ installation and compilation steps).
 - **🧠 Intelligent Automated Solver**:
   - Integrated Kociemba's two-phase solver via the `kewb` library.
   - Full support for **Step-by-Step guided solving** with a modern overlay panel showing moves like `U`, `R'`, `F2`.
@@ -55,12 +55,15 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 
 Ensure you have the Rust toolchain installed. If not, get it from [rustup.rs](https://rustup.rs/).
 
-**OpenCV Dependencies (Linux):**
-The camera tracking feature requires OpenCV development libraries and Clang.
+**Hand Tracking Environment:**
+The hand tracking feature uses a lightweight Python subprocess running **Google MediaPipe Hands** and **OpenCV-Python**. Since all computer vision calculations occur in Python, **no system-level OpenCV C++ development libraries or Clang packages are required to compile the Rust game**, ensuring 100% portable and instant Rust builds.
+
+The Python virtual environment inside [hand_tracker](file:///home/tchuong/Màn hình nền/Game_rubik/hand_tracker) is pre-configured. If you ever need to set it up manually:
 ```bash
-sudo dnf install opencv opencv-devel clang clang-devel # Fedora
-# OR
-sudo apt install libopencv-dev clang libclang-dev      # Ubuntu/Debian
+cd hand_tracker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install opencv-python mediapipe protobuf
 ```
 
 ```bash
@@ -87,7 +90,7 @@ Game_rubik/
 ├── assets/                  # 3D Textures, Fonts, and UI SVG Icons
 │   ├── fonts/               # UI fonts
 │   └── textures/            # Skins and SVG/PNG UI icons
-├── hand_tracker/            # OpenCV native Rust workspace library for camera hand motion detection
+├── hand_tracker/            # Lightweight Rust workspace library and Python MediaPipe background worker for camera-based gesture control
 ├── src/                     # Rust Source Code (ECS Modules)
 │   ├── camera/              # Orbit camera components and rotation systems
 │   ├── environment/         # Studio lights, shadow cast floor, environmental adjustments

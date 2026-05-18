@@ -1,7 +1,7 @@
 [package]
 name = "game_rubik"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bevy = { version = "0.18", features = ["default"] }
@@ -31,3 +31,5 @@ too_many_arguments = "allow"
 type_complexity = "warn"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
+collapsible_if = "allow"
+

@@ -8,8 +8,8 @@ mod ui;
 
 use bevy::prelude::*;
 use bevy_resvg::prelude::*;
-use camera::components::OrbitCamera;
 use camera::CameraPlugin;
+use camera::components::OrbitCamera;
 use environment::EnvironmentPlugin;
 use events::{ResetCameraEvent, SolveByStepsEvent};
 use input::InputPlugin;

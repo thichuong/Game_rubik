@@ -932,14 +932,14 @@ pub fn handle_sidebar_scrollbar_drag(
     if mouse_input.just_pressed(MouseButton::Left) && *interaction == Interaction::Pressed {
         scroll_state.is_dragging = true;
         scroll_state.drag_start_cursor_y = cursor_y;
-        scroll_state.drag_start_scroll_y = scroll_data.1 .0.y;
+        scroll_state.drag_start_scroll_y = scroll_data.1.0.y;
     }
 
     if scroll_state.is_dragging {
         if mouse_input.pressed(MouseButton::Left) {
             let delta_cursor_y = cursor_y - scroll_state.drag_start_cursor_y;
             let delta_scroll_y = delta_cursor_y * (max_scroll / scrollable_track_range);
-            scroll_data.1 .0.y =
+            scroll_data.1.0.y =
                 (scroll_state.drag_start_scroll_y + delta_scroll_y).clamp(0.0, max_scroll);
         } else {
             scroll_state.is_dragging = false;
