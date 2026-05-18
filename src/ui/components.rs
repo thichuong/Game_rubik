@@ -108,3 +108,6 @@ pub struct CameraTrackingText;
 
 #[derive(Component)]
 pub struct CameraFeedImage;
+
+#[derive(Component)]
+pub struct ExitButton;

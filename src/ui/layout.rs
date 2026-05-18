@@ -14,7 +14,8 @@ pub use environment::spawn_environment_section;
 pub use hud::spawn_solution_hud;
 pub use mapping::spawn_mapping_section;
 pub use sidebar::{
-    spawn_controls, spawn_divider, spawn_header, spawn_size_section, spawn_skins_section,
+    spawn_controls, spawn_divider, spawn_exit_section, spawn_header, spawn_size_section,
+    spawn_skins_section,
 };
 
 /// Set up the UI with a premium layout divided into helper functions.
@@ -112,6 +113,12 @@ pub fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 &rotate_left_icon,
                                 &rotate_right_icon,
                             );
+
+                            // Divider
+                            spawn_divider(scroll_content);
+
+                            // Exit Game Section
+                            spawn_exit_section(scroll_content, &font);
                         });
                 });
 

@@ -5,10 +5,24 @@ use crate::rubik::systems::creation::GAP;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 pub struct HandTrackingPlugin;
+
+#[derive(Resource)]
+pub struct HandTrackerProcess(pub Arc<Mutex<Option<std::process::Child>>>);
+
+impl Drop for HandTrackerProcess {
+    fn drop(&mut self) {
+        // Kill the Python subprocess on resource drop (app exit)
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+            }
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct HandTrackingEnabled(pub bool);
@@ -59,15 +73,17 @@ struct HandTrackingReceiver(Mutex<Receiver<hand_tracker::TrackerData>>);
 fn setup_camera_listener(mut commands: Commands) {
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
-        let mut tracker = match hand_tracker::HandTracker::new() {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Failed to initialize camera tracker: {e}");
-                return;
-            }
-        };
+    let (mut tracker, shared_child) = match hand_tracker::HandTracker::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Failed to initialize camera tracker: {e}");
+            return;
+        }
+    };
 
+    commands.insert_resource(HandTrackerProcess(shared_child));
+
+    thread::spawn(move || {
         loop {
             match tracker.get_delta() {
                 Ok(Some(data)) => {
@@ -76,6 +92,8 @@ fn setup_camera_listener(mut commands: Commands) {
                 Ok(None) => {}
                 Err(e) => {
                     eprintln!("Hand tracker error: {e}");
+                    // Break the loop if the pipe is broken (process killed or exited)
+                    break;
                 }
             }
             // ~60 FPS processing rate

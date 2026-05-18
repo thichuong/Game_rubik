@@ -150,10 +150,17 @@ def main():
             except BrokenPipeError:
                 # Rust application closed the pipe or exited
                 break
-
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    except BrokenPipeError:
+        pass
     finally:
         cap.release()
         hands.close()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+

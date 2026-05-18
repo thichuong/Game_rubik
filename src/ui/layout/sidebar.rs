@@ -1,8 +1,8 @@
 use crate::rubik::resources::SkinType;
 use crate::ui::components::{
-    ShuffleButton, SizeDecrementButton, SizeIncrementButton, SizeSliderFill, SizeSliderHandle,
-    SizeSliderTrack, SizeText, SkinButton, SkinList, SkinToggleButton, SolveButton,
-    SolveButtonText,
+    ExitButton, ShuffleButton, SizeDecrementButton, SizeIncrementButton, SizeSliderFill,
+    SizeSliderHandle, SizeSliderTrack, SizeText, SkinButton, SkinList, SkinToggleButton,
+    SolveButton, SolveButtonText,
 };
 use bevy::ecs::prelude::ChildSpawnerCommands;
 use bevy::prelude::*;
@@ -415,6 +415,45 @@ pub fn spawn_size_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>
                         TextColor(Color::Srgba(Srgba::WHITE)),
                     ));
                 });
+            });
+        });
+}
+
+/// Helper function to spawn the Exit Game button
+pub fn spawn_exit_section(parent: &mut ChildSpawnerCommands, font: &Handle<Font>) {
+    parent
+        .spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(8.0),
+            margin: UiRect::top(Val::Px(15.0)),
+            ..default()
+        })
+        .with_children(|p: &mut ChildSpawnerCommands| {
+            p.spawn((
+                Button,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(45.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.5)),
+                    border_radius: BorderRadius::all(Val::Px(12.0)),
+                    ..default()
+                },
+                BorderColor::all(Color::Srgba(Srgba::new(0.6, 0.2, 0.2, 0.6))),
+                BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.08, 0.08, 0.85))),
+                ExitButton,
+            ))
+            .with_children(|btn: &mut ChildSpawnerCommands| {
+                btn.spawn((
+                    Text::new("EXIT GAME"),
+                    TextFont {
+                        font_size: 15.0,
+                        font: font.clone(),
+                        ..default()
+                    },
+                    TextColor(Color::Srgba(Srgba::new(0.95, 0.3, 0.3, 1.0))),
+                ));
             });
         });
 }

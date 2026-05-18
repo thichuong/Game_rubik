@@ -4,6 +4,7 @@ use opencv::{
 };
 use std::io::{BufReader, Read};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 /// A 3D landmark point
 #[derive(Clone, Copy, Debug)]
@@ -110,7 +111,7 @@ impl HandTrackingState {
 /// 4. Decodes 3D landmarks for rendering holographic hands
 /// 5. Converts frame to RGBA and returns to Bevy
 pub struct HandTracker {
-    child: Child,
+    child: Arc<Mutex<Option<Child>>>,
     reader: BufReader<std::process::ChildStdout>,
     config: SkinConfig,
     left_hand: HandTrackingState,
@@ -119,7 +120,7 @@ pub struct HandTracker {
 
 impl HandTracker {
     /// Create a new hand tracker, spawning the Python MediaPipe worker
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<(Self, Arc<Mutex<Option<Child>>>)> {
         let python_path = "hand_tracker/.venv/bin/python";
         let script_path = "hand_tracker/hand_tracker.py";
 
@@ -140,13 +141,18 @@ impl HandTracker {
         })?;
         let reader = BufReader::new(stdout);
 
-        Ok(Self {
-            child,
-            reader,
-            config: SkinConfig::default(),
-            left_hand: HandTrackingState::default(),
-            right_hand: HandTrackingState::default(),
-        })
+        let shared_child = Arc::new(Mutex::new(Some(child)));
+
+        Ok((
+            Self {
+                child: shared_child.clone(),
+                reader,
+                config: SkinConfig::default(),
+                left_hand: HandTrackingState::default(),
+                right_hand: HandTrackingState::default(),
+            },
+            shared_child,
+        ))
     }
 
     /// Smooth a value using Exponential Moving Average
@@ -298,7 +304,12 @@ impl HandTracker {
 impl Drop for HandTracker {
     fn drop(&mut self) {
         // Terminate the worker subprocess on drop
-        let _ = self.child.kill();
+        if let Ok(mut guard) = self.child.lock() {
+            let child_opt = guard.take();
+            if let Some(mut child) = child_opt {
+                let _ = child.kill();
+            }
+        }
     }
 }
 

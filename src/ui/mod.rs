@@ -22,12 +22,18 @@ impl Plugin for UiPlugin {
                     interactions::handle_skin_button,
                     interactions::handle_skin_toggle,
                     interactions::handle_env_toggle,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
                     interactions::handle_env_controls,
                     interactions::handle_size_slider_track,
                     interactions::handle_size_decrement_button,
                     interactions::handle_size_increment_button,
                     interactions::update_size_slider_ui,
                     interactions::update_solve_button_state,
+                    interactions::handle_exit_button,
                 ),
             )
             .add_systems(
