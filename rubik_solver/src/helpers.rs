@@ -46,7 +46,7 @@ pub fn get_cube_state(
     state.into_iter().collect()
 }
 
-fn find_facelet_color_at(
+pub(crate) fn find_facelet_color_at(
     pos: Vec3,
     normal: Vec3,
     faces: &Query<(&CubieFace, &GlobalTransform)>,
