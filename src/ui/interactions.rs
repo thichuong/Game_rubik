@@ -1,8 +1,12 @@
 use crate::environment::resources::EnvironmentSettings;
 use crate::events::{CameraFrameEvent, ResetCameraEvent};
 use crate::input::hand_tracking::HandTrackingEnabled;
-use crate::rubik::components::{CubieFace, Direction, Face, RotationAxis, RotationMove, RubikCube};
-use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikSize, RubikSkin};
+use crate::rubik::components::{
+    Cubie, CubieFace, Direction, Face, GridCoord, Pivot, RotationAxis, RotationMove, RubikCube,
+};
+use crate::rubik::resources::{
+    CurrentlyRotating, FaceMapping, MoveHistory, RotationQueue, RubikSize, RubikSkin,
+};
 use crate::ui::components::{
     CameraFeedImage, CameraTrackingButton, CameraTrackingText, CloseButton, EnvControl, EnvList,
     EnvToggleButton, ExitButton, MappingControl, MappingList, MappingOrderText,
@@ -187,12 +191,18 @@ pub fn handle_next_step_button(
     }
 }
 
+#[allow(clippy::cast_precision_loss)]
 pub fn handle_run_all_button(
+    mut commands: Commands,
     mut interaction_query: InteractionQuery<RunAllButton>,
     mut solution: ResMut<StepByStepSolution>,
     mut rotation_queue: ResMut<RotationQueue>,
     rubik_size: Res<RubikSize>,
     face_mapping: Res<FaceMapping>,
+    mut cubies: Query<(&mut Transform, &mut GridCoord), With<Cubie>>,
+    cube_root: Single<Entity, With<RubikCube>>,
+    current_rotating: Option<Res<CurrentlyRotating>>,
+    pivot_query: Query<Entity, With<Pivot>>,
 ) {
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
@@ -201,18 +211,70 @@ pub fn handle_run_all_button(
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.7, 0.9, 1.0)));
 
                 if solution.active && solution.current_step < solution.moves.len() {
-                    // Feed all remaining steps into the rotation queue sequentially
+                    let size = rubik_size.size;
+                    let root_entity = *cube_root;
+
+                    // 1. Instantly complete current rotation animation if there is one in progress
+                    if let Some(ref current) = current_rotating {
+                        for &cubie_entity in &current.cubies {
+                            if let Ok((mut transform, mut coord)) = cubies.get_mut(cubie_entity) {
+                                coord.rotate(current.rotation_axis, current.angle, size);
+
+                                let offset = (size as f32 - 1.0) / 2.0;
+                                let scale = 3.0 / size as f32;
+                                let current_gap = crate::rubik::systems::creation::GAP * scale;
+
+                                transform.translation =
+                                    (coord.0.as_vec3() - Vec3::splat(offset)) * current_gap;
+                                transform.scale = Vec3::splat(scale);
+
+                                let rot_step =
+                                    Quat::from_axis_angle(current.rotation_axis, current.angle);
+                                transform.rotation = (rot_step * transform.rotation).normalize();
+
+                                commands.entity(cubie_entity).insert(ChildOf(root_entity));
+                            }
+                        }
+
+                        for p_entity in &pivot_query {
+                            commands.entity(p_entity).despawn();
+                        }
+                        commands.remove_resource::<CurrentlyRotating>();
+                    }
+
+                    // Clear any queued animated moves to prevent delayed execution
+                    rotation_queue.0.clear();
+
+                    // 2. Process all remaining moves instantly on all cubies
+                    let offset = (size as f32 - 1.0) / 2.0;
+                    let scale = 3.0 / size as f32;
+                    let current_gap = crate::rubik::systems::creation::GAP * scale;
+
                     for i in solution.current_step..solution.moves.len() {
                         let move_str = &solution.moves[i];
                         let moves = helpers::logical_string_to_physical_moves_any(
                             move_str,
-                            rubik_size.size,
+                            size,
                             *face_mapping,
                         );
+
                         for m in moves {
-                            rotation_queue.0.push_back(m);
+                            let (axis_vec, angle) = m.get_rotation_info();
+
+                            for (mut transform, mut coord) in &mut cubies {
+                                if m.is_cubie_at_slice(coord.0) {
+                                    coord.rotate(axis_vec, angle, size);
+
+                                    let rot_step = Quat::from_axis_angle(axis_vec, angle);
+                                    transform.rotation =
+                                        (rot_step * transform.rotation).normalize();
+                                    transform.translation =
+                                        (coord.0.as_vec3() - Vec3::splat(offset)) * current_gap;
+                                }
+                            }
                         }
                     }
+
                     solution.current_step = solution.moves.len();
                 }
             }
