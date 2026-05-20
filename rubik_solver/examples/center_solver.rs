@@ -136,8 +136,8 @@ fn run_demo(size: usize, seed: u64) {
     print_cube_faces(&state);
 
     println!("2. Scrambling the centers...");
-    // Scramble the centers with 20 inner slice moves as requested by the user
-    let scramble_moves = scramble_centers(&mut state, 20, &mut rng);
+    // Scramble the centers with 60 inner slice moves as requested by the user
+    let scramble_moves = scramble_centers(&mut state, 60, &mut rng);
 
     print!("   Scramble move applied: ");
     for m in scramble_moves {
@@ -149,16 +149,22 @@ fn run_demo(size: usize, seed: u64) {
     print_cube_faces(&state);
 
     println!("4. Solving the centers...");
-    if let Some(solve_moves) = solve_centers(&mut state) {
+    let start_time = std::time::Instant::now();
+    let solve_result = solve_centers(&mut state);
+    let duration = start_time.elapsed();
+
+    if let Some(solve_moves) = solve_result {
         if solve_moves.is_empty() {
             println!("   Centers are already solved! No moves needed.");
         } else {
             print!("   Moves to solve centers: ");
-            for m in solve_moves {
-                print!("{} ", format_move(m));
+            for m in &solve_moves {
+                print!("{} ", format_move(*m));
             }
             println!();
+            println!("   Solved in {} moves.", solve_moves.len());
         }
+        println!("   Time taken: {:?}", duration);
         println!("\n5. State after solving centers successfully:");
         print_cube_faces(&state);
     } else {

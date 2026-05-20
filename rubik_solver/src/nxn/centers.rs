@@ -93,12 +93,12 @@ pub fn solve_centers(state: &mut NxNState) -> Option<Vec<RotationMove>> {
     // Solve face by face in natural order: Up, Down, Front, Back, Left, Right
     // This allows maximum freedom when solving opposite faces.
     let solve_order = [
-        Face::Up,
-        Face::Down,
-        Face::Front,
-        Face::Back,
         Face::Left,
         Face::Right,
+        Face::Down,
+        Face::Back,
+        Face::Up,
+        Face::Front,
     ];
     for &target_face in &solve_order {
         current_face_solved_coords.clear();
@@ -146,8 +146,6 @@ pub fn solve_centers(state: &mut NxNState) -> Option<Vec<RotationMove>> {
             }
 
             for dest_coord in unsolved_dests {
-                // DYNAMIC CONSTRAINTS: Only preserve coordinates on previously fully solved faces.
-                // This is mathematically sufficient and guarantees 100% safety while keeping buffer options wide open.
                 let mut preserve_coords = HashSet::new();
                 for &coord in &center_coords {
                     if let Some(face) = get_face_of_coord(coord, size as i32) {

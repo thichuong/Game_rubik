@@ -112,3 +112,51 @@ pub fn get_center_f_to_u_left(size: usize) -> Vec<RotationMove> {
         get_u_move(size, Direction::Clockwise),
     ]
 }
+
+/// Target Piece: L2C Corner center (Right side corner center)
+/// Formula: r U2 r' U' r U' r'
+/// Function: Swaps a right corner center between Left and Right faces, preserving other faces
+pub fn get_center_l2c_right(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::CounterClockwise),
+    ]
+}
+
+/// Target Piece: L2C Corner center (Left side corner center)
+/// Formula: l' U2 l U l' U l
+/// Function: Swaps a left corner center between Left and Right faces, preserving other faces
+pub fn get_center_l2c_left(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_l_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::Clockwise),
+    ]
+}
+
+/// Target Piece: L2C Mid-edge center (Odd size middle axis 'm' center)
+/// Formula: m U2 m' U' m U' m'
+/// Function: Swaps a middle edge center between Left and Right faces, preserving other faces
+pub fn get_center_l2c_mid(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_m_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_m_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_m_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_m_move(size, Direction::CounterClockwise),
+    ]
+}
