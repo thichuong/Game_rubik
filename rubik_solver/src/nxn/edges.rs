@@ -128,8 +128,7 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
     let mut all_moves = Vec::new();
     let size = state.size;
 
-    for attempt in 0..5 {
-        println!("DEBUG: [pair_edges] Attempt {} starting...", attempt);
+    for _attempt in 0..5 {
         let mut paired_edges = HashSet::new();
         for &(f1, f2) in &COMPOSITE_EDGES {
             if is_edge_paired(state, f1, f2) {
@@ -138,10 +137,6 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
         }
 
         if paired_edges.len() == 12 {
-            println!(
-                "DEBUG: [pair_edges] SUCCESS! All 12 edges paired successfully after {} attempts.",
-                attempt
-            );
             return Some(all_moves);
         }
 
@@ -154,11 +149,6 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
             loop_count += 1;
             let mut progress = false;
 
-            println!(
-                "DEBUG: [pair_edges] Loop {} start. Paired: {}/12",
-                loop_count,
-                paired_edges.len()
-            );
 
             'outer_pair: for &(f1, f2) in &COMPOSITE_EDGES {
                 if paired_edges.contains(&(f1, f2)) {
@@ -215,17 +205,9 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
                     }
 
                     let Some(src_coord) = src_coord_opt else {
-                        println!(
-                            "DEBUG: [pair_edges] Matching winglet not found for dest: {:?} (colors: {:?})",
-                            dest_coord, target_colors
-                        );
                         continue;
                     };
 
-                    println!(
-                        "DEBUG: [pair_edges] Trying to pair wing. src: {:?} -> dest: {:?}, target_colors: {:?}",
-                        src_coord, dest_coord, target_colors
-                    );
                     if let Some(moves) = solve_single_wing(
                         state,
                         src_coord,
@@ -234,13 +216,10 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
                         size,
                         (f1, f2),
                     ) {
-                        println!("DEBUG: [pair_edges] SUCCESS! Found moves: {:?}", moves);
                         state.apply_moves(&moves);
                         all_moves.extend(moves);
                         progress = true;
                         break 'outer_pair;
-                    } else {
-                        println!("DEBUG: [pair_edges] FAILED to find moves via BFS!");
                     }
                 }
             }
@@ -280,10 +259,6 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
         }
 
         if paired_edges.len() == 12 {
-            println!(
-                "DEBUG: [pair_edges] SUCCESS! All 12 edges paired successfully after {} attempts.",
-                attempt
-            );
             return Some(all_moves);
         }
 
@@ -297,15 +272,7 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
             let edge1 = unpaired_edges[0];
             let edge2 = unpaired_edges[1];
 
-            println!(
-                "DEBUG: [pair_edges] Bắt đầu giải L2E cho {:?} và {:?}",
-                edge1, edge2
-            );
             if let Some(setup_moves) = find_l2e_setup(edge1, edge2, size) {
-                println!(
-                    "DEBUG: [pair_edges] Tìm thấy L2E setup moves: {:?}",
-                    setup_moves
-                );
                 state.apply_moves(&setup_moves);
                 all_moves.extend(setup_moves.clone());
 
@@ -325,15 +292,7 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
                             if let Some(c_fl) =
                                 get_wing_colors(state, w_fl, Face::Front, Face::Left)
                             {
-                                println!(
-                                    "DEBUG: [pair_edges] L2E kiểm tra winglet tại index {}: FL {:?} vs ref_color {:?}",
-                                    idx, c_fl, ref_color
-                                );
                                 if c_fl != ref_color {
-                                    println!(
-                                        "DEBUG: [pair_edges] L2E mảnh lệch! Áp dụng L2E Multi-layer Fix cho slice index {}",
-                                        w_fl.y
-                                    );
                                     let slice_idx = w_fl.y;
 
                                     let mut l2e_moves = Vec::new();
@@ -373,7 +332,6 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
     let mut all_ok = true;
     for &(f1, f2) in &COMPOSITE_EDGES {
         if !is_edge_paired(state, f1, f2) {
-            println!("DEBUG: [pair_edges] CẠNH LỖI CUỐI CÙNG: {:?}", (f1, f2));
             all_ok = false;
         }
     }
@@ -702,15 +660,6 @@ fn solve_single_wing(
                 let mut best_seq = None;
                 let mut best_slot_total = orig_slot_total;
 
-                println!(
-                    "DEBUG: [solve_single_wing] Found FL/FR! moves_len: {}, target_colors: {:?}, colors_at_slice: {:?}, candidates: {}, orig_slot_total: {}",
-                    moves.len(),
-                    target_colors,
-                    colors_at_slice,
-                    candidates.len(),
-                    orig_slot_total
-                );
-
                 for (swap_setup, swap_undo) in &candidates {
                     // Case 1: So Le (Nghịch màu - Chuẩn ghép)
                     if colors_at_slice.0 == target_colors.0 && colors_at_slice.1 == target_colors.1
@@ -734,17 +683,8 @@ fn solve_single_wing(
                         let is_progress = new_paired > orig_paired
                             || (new_paired == orig_paired && new_slot_total > best_slot_total);
                         if is_progress {
-                            println!(
-                                "DEBUG: [solve_single_wing] Case 1 ACCEPT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
-                                new_paired, new_slot_total, orig_paired, orig_slot_total
-                            );
                             best_slot_total = new_slot_total;
                             best_seq = Some(full_sequence);
-                        } else {
-                            println!(
-                                "DEBUG: [solve_single_wing] Case 1 REJECT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
-                                new_paired, new_slot_total, orig_paired, orig_slot_total
-                            );
                         }
                     }
                     // Case 2: Song Song (Hợp màu - Cần lật FR trước)
@@ -771,17 +711,8 @@ fn solve_single_wing(
                         let is_progress = new_paired > orig_paired
                             || (new_paired == orig_paired && new_slot_total > best_slot_total);
                         if is_progress {
-                            println!(
-                                "DEBUG: [solve_single_wing] Case 2 ACCEPT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
-                                new_paired, new_slot_total, orig_paired, orig_slot_total
-                            );
                             best_slot_total = new_slot_total;
                             best_seq = Some(full_sequence);
-                        } else {
-                            println!(
-                                "DEBUG: [solve_single_wing] Case 2 REJECT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
-                                new_paired, new_slot_total, orig_paired, orig_slot_total
-                            );
                         }
                     }
                 }
