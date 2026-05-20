@@ -11,12 +11,19 @@
 use crate::core::{Direction, Face, RotationAxis, RotationMove};
 use crate::nxn::state::{FACES_ORDER, NxNState};
 use kewb::{CubieCube, FaceCube};
+use std::collections::HashMap;
 
 /// Maps an NxNState (where centers are solved and edges are paired)
 /// into a standard 54-character 3x3x3 state string.
 pub fn map_to_3x3_string(state: &NxNState) -> String {
     let size = state.size;
     let mut result = vec![' '; 54];
+
+    // Build a lookup map from (Face, IVec3) to color for O(1) access
+    let mut lookup = HashMap::with_capacity(state.facelets.len());
+    for f in &state.facelets {
+        lookup.insert((f.face, f.coord), f.color);
+    }
 
     let map_idx = |v: usize| -> usize {
         if v == 0 {
@@ -35,12 +42,8 @@ pub fn map_to_3x3_string(state: &NxNState) -> String {
                 let c_n = map_idx(c3);
 
                 if let Some(coord) = NxNState::get_logical_coord(face, r_n, c_n, size) {
-                    if let Some(facelet) = state
-                        .facelets
-                        .iter()
-                        .find(|f| f.coord == coord && f.face == face)
-                    {
-                        let ch = match facelet.color {
+                    if let Some(&color) = lookup.get(&(face, coord)) {
+                        let ch = match color {
                             Face::Up => 'U',
                             Face::Right => 'R',
                             Face::Front => 'F',
@@ -266,4 +269,27 @@ pub fn is_solvable_3x3(state_str: &str) -> bool {
     } else {
         false
     }
+}
+
+/// Helper to apply OLL Parity (flip UF edge) directly to the 54-char 3x3 state string.
+/// UF edge stickers are at index 7 (Up face) and index 19 (Front face).
+pub fn apply_oll_parity_to_string(s: &str) -> String {
+    let mut chars: Vec<char> = s.chars().collect();
+    if chars.len() == 54 {
+        chars.swap(7, 19);
+    }
+    chars.into_iter().collect()
+}
+
+/// Helper to apply PLL Parity (swap UF and UB edges) directly to the 54-char 3x3 state string.
+///
+/// UF edge stickers are at index 7 (Up) and index 19 (Front).
+/// UB edge stickers are at index 1 (Up) and index 46 (Back).
+pub fn apply_pll_parity_to_string(s: &str) -> String {
+    let mut chars: Vec<char> = s.chars().collect();
+    if chars.len() == 54 {
+        chars.swap(1, 7);
+        chars.swap(19, 46);
+    }
+    chars.into_iter().collect()
 }

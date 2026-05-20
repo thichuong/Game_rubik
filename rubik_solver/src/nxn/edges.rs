@@ -4,11 +4,13 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::doc_markdown,
-    clippy::too_many_lines
+    clippy::too_many_lines,
+    clippy::similar_names,
+    clippy::redundant_else,
+    clippy::uninlined_format_args
 )]
 
 use crate::core::{Direction, Face, RotationAxis, RotationMove};
-use crate::nxn::centers::get_center_coords;
 use crate::nxn::state::{FACES_ORDER, NxNState};
 use std::collections::{HashSet, VecDeque};
 
@@ -106,7 +108,6 @@ pub fn is_edge_paired(state: &NxNState, f1: Face, f2: Face) -> bool {
 pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
     let mut all_moves = Vec::new();
     let size = state.size;
-    let center_coords = get_center_coords(size);
 
     // Keep track of paired edges
     let mut paired_edges = HashSet::new();
@@ -116,276 +117,484 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
         }
     }
 
-    for &(f1, f2) in &COMPOSITE_EDGES {
-        if paired_edges.contains(&(f1, f2)) {
-            continue;
-        }
+    let mut loop_count = 0;
+    let max_loops = 100;
 
-        let wings = get_edge_wings(f1, f2, size);
-        if wings.is_empty() {
-            continue;
-        }
+    while paired_edges.len() < 10 && loop_count < max_loops {
+        loop_count += 1;
+        let mut progress = false;
 
-        // We want to pair all other wings in this edge to match the color of the first wing
-        let Some(target_colors) = get_wing_colors(state, wings[0], f1, f2) else {
-            continue;
-        };
-
-        for &dest_coord in &wings[1..] {
-            if let Some(colors) = get_wing_colors(state, dest_coord, f1, f2) {
-                if colors == target_colors {
-                    continue;
-                }
+        'outer_pair: for &(f1, f2) in &COMPOSITE_EDGES {
+            if paired_edges.contains(&(f1, f2)) {
+                continue;
             }
 
-            // Find a wing piece with matching colors that is currently not part of a paired edge
-            let mut src_coord_opt = None;
-            'outer: for &(sf1, sf2) in &COMPOSITE_EDGES {
-                if paired_edges.contains(&(sf1, sf2)) || (sf1 == f1 && sf2 == f2) {
-                    continue;
-                }
-                let swings = get_edge_wings(sf1, sf2, size);
-                for &sc in &swings {
-                    if let Some(colors) = get_wing_colors(state, sc, sf1, sf2) {
-                        if (colors.0 == target_colors.0 && colors.1 == target_colors.1)
-                            || (colors.0 == target_colors.1 && colors.1 == target_colors.0)
-                        {
-                            src_coord_opt = Some((sc, sf1, sf2));
-                            break 'outer;
-                        }
-                    }
-                }
+            let wings = get_edge_wings(f1, f2, size);
+            if wings.is_empty() {
+                continue;
             }
 
-            let Some((src_coord, _sf1, _sf2)) = src_coord_opt else {
+            let Some(target_colors) = get_wing_colors(state, wings[0], f1, f2) else {
                 continue;
             };
 
-            // Run localized BFS to pair this wing
-            if let Some(moves) = solve_single_wing(
-                state,
-                src_coord,
-                dest_coord,
-                f1,
-                f2,
-                &center_coords,
-                &paired_edges,
-            ) {
-                state.apply_moves(&moves);
-                all_moves.extend(moves);
-            } else {
-                return None;
+            for &dest_coord in &wings[1..] {
+                if let Some(colors) = get_wing_colors(state, dest_coord, f1, f2) {
+                    if colors == target_colors {
+                        continue;
+                    }
+                }
+
+                // Find an unpaired wing piece with matching colors
+                let mut src_coord_opt = None;
+                'src_search: for &(sf1, sf2) in &COMPOSITE_EDGES {
+                    if paired_edges.contains(&(sf1, sf2)) || (sf1 == f1 && sf2 == f2) {
+                        continue;
+                    }
+                    let swings = get_edge_wings(sf1, sf2, size);
+                    for &sc in &swings {
+                        if let Some(colors) = get_wing_colors(state, sc, sf1, sf2) {
+                            if (colors.0 == target_colors.0 && colors.1 == target_colors.1)
+                                || (colors.0 == target_colors.1 && colors.1 == target_colors.0)
+                            {
+                                src_coord_opt = Some(sc);
+                                break 'src_search;
+                            }
+                        }
+                    }
+                }
+
+                let Some(src_coord) = src_coord_opt else {
+                    continue;
+                };
+
+                // Run fast geometry BFS to pair this wing
+                if let Some(moves) = solve_single_wing(state, src_coord, dest_coord, size) {
+                    state.apply_moves(&moves);
+                    all_moves.extend(moves);
+                    progress = true;
+                    break 'outer_pair;
+                } else {
+                    return None;
+                }
             }
         }
 
-        paired_edges.insert((f1, f2));
+        // Dynamically update paired edges list
+        paired_edges.clear();
+        for &(f1, f2) in &COMPOSITE_EDGES {
+            if is_edge_paired(state, f1, f2) {
+                paired_edges.insert((f1, f2));
+            }
+        }
+
+        if !progress {
+            break;
+        }
+    }
+
+    // Solve Last Two Edges (L2E) if there are exactly 2 unpaired edges left
+    let unpaired_edges: Vec<(Face, Face)> = COMPOSITE_EDGES
+        .iter()
+        .copied()
+        .filter(|&edge| !is_edge_paired(state, edge.0, edge.1))
+        .collect();
+
+    if unpaired_edges.len() == 2 {
+        let edge1 = unpaired_edges[0];
+        let edge2 = unpaired_edges[1];
+
+        if let Some(setup_moves) = find_l2e_setup(edge1, edge2, size) {
+            state.apply_moves(&setup_moves);
+            all_moves.extend(setup_moves.clone());
+
+            let wings1 = get_edge_wings(Face::Front, Face::Left, size);
+            let wings2 = get_edge_wings(Face::Front, Face::Right, size);
+
+            for idx in 0..wings1.len() {
+                let w1_coord = wings1[idx];
+                let w2_coord = wings2[idx];
+                let c1 = get_wing_colors(state, w1_coord, Face::Front, Face::Left);
+                let c2 = get_wing_colors(state, w2_coord, Face::Front, Face::Right);
+
+                if c1 != c2 {
+                    let slice_idx = w1_coord.y;
+                    let l2e_moves = get_l2e_formula_moves(size, slice_idx);
+                    state.apply_moves(&l2e_moves);
+                    all_moves.extend(l2e_moves);
+                }
+            }
+
+            // Undo L2E setup
+            let mut undo_setup = setup_moves;
+            undo_setup.reverse();
+            for m in &mut undo_setup {
+                *m = m.inverse();
+            }
+            state.apply_moves(&undo_setup);
+            all_moves.extend(undo_setup);
+        }
+    }
+
+    // Verify all edges are correctly paired at the end
+    for &(f1, f2) in &COMPOSITE_EDGES {
+        if !is_edge_paired(state, f1, f2) {
+            return None;
+        }
     }
 
     Some(all_moves)
 }
 
-/// Find a sequence of moves to pair a single wing piece
-fn solve_single_wing(
-    state: &NxNState,
-    src: bevy::prelude::IVec3,
-    dest: bevy::prelude::IVec3,
-    df1: Face,
-    df2: Face,
-    centers: &[bevy::prelude::IVec3],
-    paired: &HashSet<(Face, Face)>,
-) -> Option<Vec<RotationMove>> {
-    let size = state.size;
+/// Rotation helper for coordinate tracking in BFS
+fn rotate_coord(coord: bevy::prelude::IVec3, m: RotationMove, size: i32) -> bevy::prelude::IVec3 {
+    let is_matched = match m.axis {
+        RotationAxis::X => coord.x == m.index,
+        RotationAxis::Y => coord.y == m.index,
+        RotationAxis::Z => coord.z == m.index,
+    };
+    if is_matched {
+        let (axis_vec, angle) = m.get_rotation_info();
+        let offset = (size as f32 - 1.0) / 2.0;
+        let rotation = bevy::prelude::Quat::from_axis_angle(axis_vec, angle);
+        let centered = coord.as_vec3() - bevy::prelude::Vec3::splat(offset);
+        let rotated = rotation * centered;
+        let restored = rotated + bevy::prelude::Vec3::splat(offset);
+        restored.round().as_ivec3()
+    } else {
+        coord
+    }
+}
 
-    // Generator moves: standard face rotations + edge flipping macro
-    let mut generators = Vec::new();
-
-    // 1. Standard face rotations (U, D, R, L, F, B)
+/// Generate 12 standard outer face moves U, D, R, L, F, B
+fn get_outer_generators(size: usize) -> Vec<RotationMove> {
+    let mut moves = Vec::new();
+    let s = size as i32;
     for &face in &FACES_ORDER {
         let (axis, index) = match face {
             Face::Left => (RotationAxis::X, 0),
-            Face::Right => (RotationAxis::X, size as i32 - 1),
+            Face::Right => (RotationAxis::X, s - 1),
             Face::Down => (RotationAxis::Y, 0),
-            Face::Up => (RotationAxis::Y, size as i32 - 1),
+            Face::Up => (RotationAxis::Y, s - 1),
             Face::Back => (RotationAxis::Z, 0),
-            Face::Front => (RotationAxis::Z, size as i32 - 1),
+            Face::Front => (RotationAxis::Z, s - 1),
         };
-        generators.push(vec![RotationMove {
+        moves.push(RotationMove {
             axis,
             index,
             direction: Direction::Clockwise,
             add_to_history: true,
-        }]);
-        generators.push(vec![RotationMove {
+        });
+        moves.push(RotationMove {
             axis,
             index,
             direction: Direction::CounterClockwise,
             add_to_history: true,
-        }]);
+        });
     }
+    moves
+}
 
-    // 2. Standard Edge Flipping Macro: R U R' F R' F' R
-    // We can define this macro as a pre-packaged move sequence
-    let right_flip = vec![
+/// Standard Flipping Macro: R U R' F R' F' R
+fn get_flipping_macro(size: usize) -> Vec<RotationMove> {
+    let s = size as i32;
+    vec![
         RotationMove {
             axis: RotationAxis::X,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::Y,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::X,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::CounterClockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::Z,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::X,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::CounterClockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::Z,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::CounterClockwise,
             add_to_history: true,
         },
         RotationMove {
             axis: RotationAxis::X,
-            index: size as i32 - 1,
+            index: s - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         },
-    ];
-    generators.push(right_flip);
+    ]
+}
 
-    // 3. Inner slice moves (index from 1 to size-2) paired with flipping/setup moves to preserve centers
-    for idx in 1..(size - 1) {
-        for &axis in &[RotationAxis::X, RotationAxis::Y, RotationAxis::Z] {
-            // Basic slice moves (may be used if we can restore centers later in the search tree)
-            generators.push(vec![RotationMove {
-                axis,
-                index: idx as i32,
-                direction: Direction::Clockwise,
-                add_to_history: true,
-            }]);
-            generators.push(vec![RotationMove {
-                axis,
-                index: idx as i32,
-                direction: Direction::CounterClockwise,
-                add_to_history: true,
-            }]);
-        }
-    }
+/// BFS to find setup moves for a single wing pairing using only outer face moves
+fn solve_single_wing(
+    state: &NxNState,
+    src: bevy::prelude::IVec3,
+    dest: bevy::prelude::IVec3,
+    size: usize,
+) -> Option<Vec<RotationMove>> {
+    let s = size as i32;
+    let generators = get_outer_generators(size);
 
     let mut queue = VecDeque::new();
-    queue.push_back((state.clone(), Vec::new(), src));
+    queue.push_back((Vec::new(), src, dest));
 
     let mut visited = HashSet::new();
-    visited.insert(state.to_string_rep());
+    visited.insert((src, dest));
 
-    // Depth limit: 4 macro steps
-    let max_depth = 4;
+    let max_setup_depth = 4;
 
-    while let Some((curr_state, moves, curr_pos)) = queue.pop_front() {
-        // Check if the wing has reached dest and is properly aligned (colors match)
-        if curr_pos == dest {
-            if let Some(colors) = get_wing_colors(&curr_state, dest, df1, df2) {
-                if let Some(target_colors) =
-                    get_wing_colors(&curr_state, get_edge_wings(df1, df2, size)[0], df1, df2)
-                {
-                    if colors == target_colors {
-                        return Some(moves);
+    while let Some((moves, curr_src, curr_dest)) = queue.pop_front() {
+        // Target: dest at FR (s-1, slice_idx, s-1), src at FL (0, slice_idx, s-1)
+        if curr_dest.x == s - 1
+            && curr_dest.z == s - 1
+            && curr_src.x == 0
+            && curr_src.z == s - 1
+            && curr_dest.y == curr_src.y
+            && curr_dest.y > 0
+            && curr_dest.y < s - 1
+        {
+            let slice_idx = curr_dest.y;
+            let y_ref = if slice_idx == 1 { s - 2 } else { 1 };
+
+            let mut temp_state = state.clone();
+            temp_state.apply_moves(&moves);
+
+            // Try slice 90 degrees Clockwise to check color alignment
+            let slice_move = RotationMove {
+                axis: RotationAxis::Y,
+                index: slice_idx,
+                direction: Direction::Clockwise,
+                add_to_history: true,
+            };
+            let mut test_state = temp_state.clone();
+            test_state.apply_move(slice_move);
+
+            if let Some(colors_at_slice) = get_wing_colors(
+                &test_state,
+                bevy::prelude::IVec3::new(s - 1, slice_idx, s - 1),
+                Face::Front,
+                Face::Right,
+            ) {
+                if let Some(colors_ref) = get_wing_colors(
+                    &test_state,
+                    bevy::prelude::IVec3::new(s - 1, y_ref, s - 1),
+                    Face::Front,
+                    Face::Right,
+                ) {
+                    if colors_at_slice == colors_ref {
+                        // Found valid setup!
+                        let mut full_sequence = moves.clone();
+                        full_sequence.push(slice_move);
+                        full_sequence.extend(get_flipping_macro(size));
+                        full_sequence.push(slice_move.inverse());
+                        for m in moves.iter().rev() {
+                            full_sequence.push(m.inverse());
+                        }
+                        return Some(full_sequence);
                     }
                 }
             }
+        }
+
+        if moves.len() >= max_setup_depth {
+            continue;
+        }
+
+        for &m in &generators {
+            let next_src = rotate_coord(curr_src, m, s);
+            let next_dest = rotate_coord(curr_dest, m, s);
+
+            if visited.insert((next_src, next_dest)) {
+                let mut next_moves = moves.clone();
+                next_moves.push(m);
+                queue.push_back((next_moves, next_src, next_dest));
+            }
+        }
+    }
+
+    None
+}
+
+/// Find outer setup moves to place L2E on FL and FR
+fn find_l2e_setup(
+    edge1: (Face, Face),
+    edge2: (Face, Face),
+    size: usize,
+) -> Option<Vec<RotationMove>> {
+    let s = size as i32;
+    let generators = get_outer_generators(size);
+
+    let wings1 = get_edge_wings(edge1.0, edge1.1, size);
+    let wings2 = get_edge_wings(edge2.0, edge2.1, size);
+    if wings1.is_empty() || wings2.is_empty() {
+        return None;
+    }
+    let start_pos1 = wings1[0];
+    let start_pos2 = wings2[0];
+
+    let mut queue = VecDeque::new();
+    queue.push_back((Vec::new(), start_pos1, start_pos2));
+
+    let mut visited = HashSet::new();
+    visited.insert((start_pos1, start_pos2));
+
+    let max_depth = 4;
+
+    while let Some((moves, p1, p2)) = queue.pop_front() {
+        if p1.x == 0 && p1.z == s - 1 && p2.x == s - 1 && p2.z == s - 1 {
+            return Some(moves);
         }
 
         if moves.len() >= max_depth {
             continue;
         }
 
-        for gen_moves in &generators {
-            let mut next_state = curr_state.clone();
-            next_state.apply_moves(gen_moves);
+        for &m in &generators {
+            let next_p1 = rotate_coord(p1, m, s);
+            let next_p2 = rotate_coord(p2, m, s);
 
-            // Constraint: Centers must remain intact
-            let mut disrupted_centers = false;
-            for &coord in centers {
-                let prev_color = curr_state
-                    .facelets
-                    .iter()
-                    .find(|f| f.coord == coord)
-                    .map(|f| f.color);
-                let next_color = next_state
-                    .facelets
-                    .iter()
-                    .find(|f| f.coord == coord)
-                    .map(|f| f.color);
-                if prev_color != next_color {
-                    disrupted_centers = true;
-                    break;
-                }
-            }
-
-            if disrupted_centers {
-                continue;
-            }
-
-            // Constraint: Already paired edges must not be disrupted
-            let mut disrupted_edges = false;
-            for &(pf1, pf2) in paired {
-                if !is_edge_paired(&next_state, pf1, pf2) {
-                    disrupted_edges = true;
-                    break;
-                }
-            }
-
-            if disrupted_edges {
-                continue;
-            }
-
-            // Track position of our wing
-            let mut next_pos = curr_pos;
-            for &m in gen_moves {
-                let (axis_vec, angle) = m.get_rotation_info();
-                let size_i32 = size as i32;
-                let is_matched = match m.axis {
-                    RotationAxis::X => next_pos.x == m.index,
-                    RotationAxis::Y => next_pos.y == m.index,
-                    RotationAxis::Z => next_pos.z == m.index,
-                };
-
-                if is_matched {
-                    let offset = (size_i32 as f32 - 1.0) / 2.0;
-                    let rotation = bevy::prelude::Quat::from_axis_angle(axis_vec, angle);
-                    let centered = next_pos.as_vec3() - bevy::prelude::Vec3::splat(offset);
-                    let rotated = rotation * centered;
-                    let restored = rotated + bevy::prelude::Vec3::splat(offset);
-                    next_pos = restored.round().as_ivec3();
-                }
-            }
-
-            let state_rep = next_state.to_string_rep();
-            if visited.insert(state_rep) {
+            if visited.insert((next_p1, next_p2)) {
                 let mut next_moves = moves.clone();
-                next_moves.extend(gen_moves.clone());
-                queue.push_back((next_state, next_moves, next_pos));
+                next_moves.push(m);
+                queue.push_back((next_moves, next_p1, next_p2));
             }
         }
     }
 
     None
+}
+
+/// Standard L2E wing pairing formula moves for layer slice_idx
+fn get_l2e_formula_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
+    let s = size as i32;
+    let r_idx = s - 1 - slice_idx;
+    let l_idx = slice_idx;
+
+    let r_cw = RotationMove {
+        axis: RotationAxis::X,
+        index: r_idx,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+    let l_cw = RotationMove {
+        axis: RotationAxis::X,
+        index: l_idx,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+    let l_ccw = RotationMove {
+        axis: RotationAxis::X,
+        index: l_idx,
+        direction: Direction::CounterClockwise,
+        add_to_history: true,
+    };
+
+    let u = RotationMove {
+        axis: RotationAxis::Y,
+        index: s - 1,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+    let f = RotationMove {
+        axis: RotationAxis::Z,
+        index: s - 1,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+
+    vec![
+        r_cw, u, u, r_cw, u, u, f, f, r_cw, f, f, l_ccw, u, u, l_cw, u, u, r_cw, r_cw,
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct SimpleRng {
+        state: u64,
+    }
+
+    impl SimpleRng {
+        const fn new(seed: u64) -> Self {
+            Self { state: seed }
+        }
+
+        fn next_u32(&mut self) -> u32 {
+            self.state = self
+                .state
+                .wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            (self.state >> 32) as u32
+        }
+
+        fn next_range(&mut self, min: usize, max: usize) -> usize {
+            let range = max - min;
+            if range == 0 {
+                return min;
+            }
+            min + (self.next_u32() as usize % range)
+        }
+    }
+
+    #[test]
+    fn test_edges_already_solved_4x4() {
+        let mut state = NxNState::new(4);
+        let moves = pair_edges(&mut state);
+        assert!(moves.is_some());
+    }
+
+    #[test]
+    fn test_edges_already_solved_5x5() {
+        let mut state = NxNState::new(5);
+        let moves = pair_edges(&mut state);
+        assert!(moves.is_some());
+    }
+
+    #[test]
+    fn test_solve_edges_4x4_scrambled() {
+        for seed in 1..=3 {
+            let mut rng = SimpleRng::new(seed * 300);
+            let mut state = NxNState::new(4);
+
+            // Scramble edges with outer moves (so centers remain solved)
+            let generators = get_outer_generators(4);
+            for _ in 0..5 {
+                let idx = rng.next_range(0, generators.len());
+                state.apply_move(generators[idx]);
+            }
+
+            let solve_result = pair_edges(&mut state);
+            assert!(
+                solve_result.is_some(),
+                "Failed to pair edges for 4x4 with seed {seed}"
+            );
+
+            for &(f1, f2) in &COMPOSITE_EDGES {
+                assert!(
+                    is_edge_paired(&state, f1, f2),
+                    "Edge {f1:?} - {f2:?} was not paired with seed {seed}"
+                );
+            }
+        }
+    }
 }

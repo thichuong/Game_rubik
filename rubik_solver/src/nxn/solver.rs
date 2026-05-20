@@ -3,7 +3,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::doc_markdown
+    clippy::doc_markdown,
+    clippy::similar_names
 )]
 
 use crate::core::RotationMove;
@@ -37,41 +38,46 @@ pub fn solve_nxn(
 
     // 4. Parity Verification and Correction
     // Try the 4 parity correction combinations to find the solvable 3x3 state
-    let mut solved_parity_moves = None;
     let mut final_3x3_state_str = String::new();
+    let mut best_combo = None;
 
-    let combo_attempts = vec![
+    let base_3x3_str = map_to_3x3_string(&state);
+
+    let combo_attempts = [
         (false, false), // No parities
         (true, false),  // OLL only
         (false, true),  // PLL only
         (true, true),   // OLL + PLL
     ];
 
-    for (try_oll, try_pll) in combo_attempts {
-        let mut temp_state = state.clone();
-        let mut temp_moves = Vec::new();
-
+    for &(try_oll, try_pll) in &combo_attempts {
+        let mut temp_3x3 = base_3x3_str.clone();
         if try_oll {
-            let oll_moves = get_oll_parity_moves(size);
-            temp_state.apply_moves(&oll_moves);
-            temp_moves.extend(oll_moves);
+            temp_3x3 = crate::nxn::parity::apply_oll_parity_to_string(&temp_3x3);
         }
-
         if try_pll {
-            let pll_moves = get_pll_parity_moves(size);
-            temp_state.apply_moves(&pll_moves);
-            temp_moves.extend(pll_moves);
+            temp_3x3 = crate::nxn::parity::apply_pll_parity_to_string(&temp_3x3);
         }
 
-        let state_3x3 = map_to_3x3_string(&temp_state);
-        if is_solvable_3x3(&state_3x3) {
-            solved_parity_moves = Some(temp_moves);
-            final_3x3_state_str = state_3x3;
+        if is_solvable_3x3(&temp_3x3) {
+            best_combo = Some((try_oll, try_pll));
+            final_3x3_state_str = temp_3x3;
             break;
         }
     }
 
-    let parity_moves = solved_parity_moves?;
+    let (need_oll, need_pll) = best_combo?;
+    let mut parity_moves = Vec::new();
+
+    if need_oll {
+        let oll_moves = get_oll_parity_moves(size);
+        parity_moves.extend(oll_moves);
+    }
+    if need_pll {
+        let pll_moves = get_pll_parity_moves(size);
+        parity_moves.extend(pll_moves);
+    }
+
     state.apply_moves(&parity_moves);
     all_moves.extend(parity_moves);
 
