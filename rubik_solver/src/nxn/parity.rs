@@ -8,7 +8,8 @@
     clippy::similar_names
 )]
 
-use crate::core::{Direction, Face, RotationAxis, RotationMove};
+use crate::core::{Face, RotationMove};
+use crate::nxn::formulas::{get_oll_parity_fix, get_pll_parity_fix};
 use crate::nxn::state::{FACES_ORDER, NxNState};
 use kewb::{CubieCube, FaceCube};
 use std::collections::HashMap;
@@ -67,205 +68,15 @@ pub fn map_to_3x3_string(state: &NxNState) -> String {
 }
 
 /// Returns the sequence of moves to fix OLL Parity (flipped composite edge)
-/// Formula: Rw2 B2 U2 Lw U2 Rw' U2 Rw U2 F2 Rw F2 Lw' B2 Rw2
-#[allow(clippy::too_many_lines)]
+/// Formula: Rw U2 x Rw U2 Rw U2 Rw' U2 Lw U2 Rw' U2 Rw U2 Rw' U2 Rw x'
 pub fn get_oll_parity_moves(size: usize) -> Vec<RotationMove> {
-    let s = size as i32;
-    let mut moves = Vec::new();
-
-    let rw_cw = |m: &mut Vec<RotationMove>| {
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        });
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: s - 2,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        });
-    };
-    let rw_ccw = |m: &mut Vec<RotationMove>| {
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        });
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: s - 2,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        });
-    };
-    let lw_cw = |m: &mut Vec<RotationMove>| {
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: 0,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        });
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        });
-    };
-    let lw_ccw = |m: &mut Vec<RotationMove>| {
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: 0,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        });
-        m.push(RotationMove {
-            axis: RotationAxis::X,
-            index: 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        });
-    };
-
-    let b2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::Z,
-            index: 0,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-    let u2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-    let f2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::Z,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-
-    // Rw2
-    rw_cw(&mut moves);
-    rw_cw(&mut moves);
-    // B2
-    b2(&mut moves);
-    // U2
-    u2(&mut moves);
-    // Lw
-    lw_cw(&mut moves);
-    // U2
-    u2(&mut moves);
-    // Rw'
-    rw_ccw(&mut moves);
-    // U2
-    u2(&mut moves);
-    // Rw
-    rw_cw(&mut moves);
-    // U2
-    u2(&mut moves);
-    // F2
-    f2(&mut moves);
-    // Rw
-    rw_cw(&mut moves);
-    // F2
-    f2(&mut moves);
-    // Lw'
-    lw_ccw(&mut moves);
-    // B2
-    b2(&mut moves);
-    // Rw2
-    rw_cw(&mut moves);
-    rw_cw(&mut moves);
-
-    moves
+    get_oll_parity_fix(size)
 }
 
 /// Returns the sequence of moves to fix PLL Parity (swapped composite edges)
-/// Formula: r2 U2 r2 Uw2 r2 uw2
+/// Formula: r2 U2 r2 Uw2 r2 Uw2
 pub fn get_pll_parity_moves(size: usize) -> Vec<RotationMove> {
-    let s = size as i32;
-    let mut moves = Vec::new();
-
-    let r2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::X,
-            index: s - 2,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-    let u2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-    let uw2 = |m: &mut Vec<RotationMove>| {
-        let mv = RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 2,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv);
-        m.push(mv);
-    };
-    let double_uw2 = |m: &mut Vec<RotationMove>| {
-        let mv1 = RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        let mv2 = RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 2,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        };
-        m.push(mv1);
-        m.push(mv1);
-        m.push(mv2);
-        m.push(mv2);
-    };
-
-    // r2
-    r2(&mut moves);
-    // U2
-    u2(&mut moves);
-    // r2
-    r2(&mut moves);
-    // Uw2
-    double_uw2(&mut moves);
-    // r2
-    r2(&mut moves);
-    // uw2
-    uw2(&mut moves);
-
-    moves
+    get_pll_parity_fix(size)
 }
 
 /// Checks if a 3x3 state string is mathematically solvable

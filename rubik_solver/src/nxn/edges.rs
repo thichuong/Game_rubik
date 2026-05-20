@@ -149,7 +149,6 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
             loop_count += 1;
             let mut progress = false;
 
-
             'outer_pair: for &(f1, f2) in &COMPOSITE_EDGES {
                 if paired_edges.contains(&(f1, f2)) {
                     continue;
@@ -896,14 +895,14 @@ fn get_oll_parity_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
         b_cw, b_cw, // U2
         u_cw, u_cw, // l
         l_cw, // U2
-        u_cw, u_cw, // r'
+        u_cw, u_cw,  // r'
         r_ccw, // U2
         u_cw, u_cw, // r
         r_cw, // U2
         u_cw, u_cw, // F2
         f_cw, f_cw, // r
         r_cw, // F2
-        f_cw, f_cw, // l'
+        f_cw, f_cw,  // l'
         l_ccw, // B2
         b_cw, b_cw, // r2
         r_cw, r_cw,
