@@ -59,6 +59,7 @@ pub fn map_to_3x3_string(state: &NxNState) -> String {
 
 /// Returns the sequence of moves to fix OLL Parity (flipped composite edge)
 /// Formula: Rw2 B2 U2 Lw U2 Rw' U2 Rw U2 F2 Rw F2 Lw' B2 Rw2
+#[allow(clippy::too_many_lines)]
 pub fn get_oll_parity_moves(size: usize) -> Vec<RotationMove> {
     let s = size as i32;
     let mut moves = Vec::new();

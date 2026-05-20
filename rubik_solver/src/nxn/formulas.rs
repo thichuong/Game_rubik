@@ -1,0 +1,114 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::missing_const_for_fn
+)]
+
+use crate::core::{Direction, RotationAxis, RotationMove};
+
+/// Helper to get the 'r' inner slice rotation move (adjacent to Right face)
+pub const fn get_r_move(size: usize, direction: Direction) -> RotationMove {
+    RotationMove {
+        axis: RotationAxis::X,
+        index: (size as i32) - 2,
+        direction,
+        add_to_history: true,
+    }
+}
+
+/// Helper to get the 'l' inner slice rotation move (adjacent to Left face)
+pub const fn get_l_move(_size: usize, direction: Direction) -> RotationMove {
+    RotationMove {
+        axis: RotationAxis::X,
+        index: 1,
+        direction,
+        add_to_history: true,
+    }
+}
+
+/// Helper to get the 'm' middle slice rotation move for odd-sized cubes
+pub const fn get_m_move(size: usize, direction: Direction) -> RotationMove {
+    RotationMove {
+        axis: RotationAxis::X,
+        index: (size as i32) / 2,
+        direction,
+        add_to_history: true,
+    }
+}
+
+/// Helper to get the 'U' outer face rotation move
+pub const fn get_u_move(size: usize, direction: Direction) -> RotationMove {
+    RotationMove {
+        axis: RotationAxis::Y,
+        index: (size as i32) - 1,
+        direction,
+        add_to_history: true,
+    }
+}
+
+/// Upgraded BFS Commutator actions (B)
+/// Target Piece: Corner center (4x4 or 5x5 corner centers)
+/// Formula: r U l' U' r' U l U'
+/// Function: Shoots a center piece from Front-Top-Right to Up-Bottom-Right
+pub fn get_center_f_to_u_right(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+    ]
+}
+
+/// Target Piece: Corner center (4x4 or 5x5 corner centers)
+/// Formula: r2 U l' U' r2' U l U'
+/// Function: Shoots a center piece from Down-Top-Right straight up to Up-Bottom-Right
+pub fn get_center_d_to_u_right(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_r_move(size, Direction::Clockwise),
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+    ]
+}
+
+/// Target Piece: Edge center (Odd size middle axis 'm' center)
+/// Formula: m U r' U' m' U r U'
+/// Function: Shoots a center piece from Front-Top-Middle to Up-Bottom-Middle
+pub fn get_center_mid_f_to_u(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_m_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_m_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+    ]
+}
+
+/// Target Piece: Corner center (4x4 or 5x5 corner centers)
+/// Formula: l' U' r U l U' r' U
+/// Function: Shoots a center piece from Front-Top-Left to Up-Bottom-Left
+pub fn get_center_f_to_u_left(size: usize) -> Vec<RotationMove> {
+    vec![
+        get_l_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::Clockwise),
+        get_l_move(size, Direction::Clockwise),
+        get_u_move(size, Direction::CounterClockwise),
+        get_r_move(size, Direction::CounterClockwise),
+        get_u_move(size, Direction::Clockwise),
+    ]
+}
