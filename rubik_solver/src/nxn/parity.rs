@@ -25,21 +25,27 @@ pub fn map_to_3x3_string(state: &NxNState) -> String {
         lookup.insert((f.face, f.coord), f.color);
     }
 
-    let map_idx = |v: usize| -> usize {
+    let map_idx = |v: usize, is_center: bool| -> usize {
         if v == 0 {
             0
-        } else if v == 1 {
-            1
-        } else {
+        } else if v == 2 {
             size - 1
+        } else {
+            // v == 1 (center or edge winglet representation)
+            if is_center && size % 2 == 1 {
+                size / 2
+            } else {
+                1
+            }
         }
     };
 
     for (face_idx, &face) in FACES_ORDER.iter().enumerate() {
         for r3 in 0..3 {
             for c3 in 0..3 {
-                let r_n = map_idx(r3);
-                let c_n = map_idx(c3);
+                let is_center = r3 == 1 && c3 == 1;
+                let r_n = map_idx(r3, is_center);
+                let c_n = map_idx(c3, is_center);
 
                 if let Some(coord) = NxNState::get_logical_coord(face, r_n, c_n, size) {
                     if let Some(&color) = lookup.get(&(face, coord)) {
