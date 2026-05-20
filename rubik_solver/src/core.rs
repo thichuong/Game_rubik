@@ -259,7 +259,18 @@ impl FaceMapping {
             (RotationAxis::Y, 0) => Face::Down,
             (RotationAxis::Z, idx) if idx == size - 1 => Face::Front,
             (RotationAxis::Z, 0) => Face::Back,
-            _ => return format!("{:?}{}", m.axis, m.index),
+            _ => {
+                let axis_char = match m.axis {
+                    RotationAxis::X => "X",
+                    RotationAxis::Y => "Y",
+                    RotationAxis::Z => "Z",
+                };
+                return if m.direction == Direction::Clockwise {
+                    format!("{axis_char}{}", m.index)
+                } else {
+                    format!("{axis_char}{}'", m.index)
+                };
+            }
         };
 
         let logic_face = self.get_logic_face_for_physical(phys_face);

@@ -1,7 +1,8 @@
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::missing_const_for_fn
+    clippy::missing_const_for_fn,
+    clippy::doc_markdown
 )]
 
 use crate::core::{Direction, RotationAxis, RotationMove};

@@ -1,20 +1,13 @@
-mod camera;
-mod environment;
-mod events;
-mod input;
-mod rubik;
-mod ui;
-
 use bevy::prelude::*;
 use bevy_resvg::prelude::*;
-use camera::CameraPlugin;
-use camera::components::OrbitCamera;
-use environment::EnvironmentPlugin;
-use events::{ResetCameraEvent, SolveByStepsEvent};
-use input::InputPlugin;
-use rubik::RubikPlugin;
+use game_rubik::camera::CameraPlugin;
+use game_rubik::camera::components::OrbitCamera;
+use game_rubik::environment::EnvironmentPlugin;
+use game_rubik::events::{ResetCameraEvent, SolveByStepsEvent};
+use game_rubik::input::InputPlugin;
+use game_rubik::rubik::RubikPlugin;
+use game_rubik::ui::UiPlugin;
 use rubik_solver::SolverPlugin;
-use ui::UiPlugin;
 
 fn main() {
     App::new()

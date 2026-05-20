@@ -2636,6 +2636,7 @@ dependencies = [
  "bevy",
  "bevy_resvg",
  "hand_tracker",
+ "kewb",
  "rand 0.10.1",
  "rubik_solver",
 ]

@@ -7,7 +7,10 @@
     clippy::too_many_lines,
     clippy::similar_names,
     clippy::redundant_else,
-    clippy::uninlined_format_args
+    clippy::uninlined_format_args,
+    clippy::needless_range_loop,
+    clippy::used_underscore_binding,
+    clippy::semicolon_if_nothing_returned
 )]
 
 use crate::core::{Direction, Face, RotationAxis, RotationMove};

@@ -366,9 +366,9 @@ pub fn physical_move_to_logical_string_any(
         }
     } else {
         let axis_char = match logic_axis {
-            RotationAxis::X => "LX",
-            RotationAxis::Y => "LY",
-            RotationAxis::Z => "LZ",
+            RotationAxis::X => "X",
+            RotationAxis::Y => "Y",
+            RotationAxis::Z => "Z",
         };
 
         if logic_direction == Direction::Clockwise {
@@ -400,99 +400,9 @@ pub fn logical_string_to_physical_moves_any(
             continue;
         };
 
-        if first_char == 'L' {
-            if let Some(second_char) = chars.next() {
-                if second_char == 'X' || second_char == 'Y' || second_char == 'Z' {
-                    let logic_axis = match second_char {
-                        'X' => RotationAxis::X,
-                        'Y' => RotationAxis::Y,
-                        _ => RotationAxis::Z,
-                    };
-
-                    let mut index_str = String::new();
-                    let mut modifier_char = None;
-                    for c in chars {
-                        if c.is_ascii_digit() {
-                            index_str.push(c);
-                        } else {
-                            modifier_char = Some(c);
-                            break;
-                        }
-                    }
-
-                    let Ok(logic_index) = index_str.parse::<i32>() else {
-                        continue;
-                    };
-
-                    let logic_direction = if modifier_char == Some('\'') {
-                        Direction::CounterClockwise
-                    } else {
-                        Direction::Clockwise
-                    };
-
-                    let v_logic = match logic_axis {
-                        RotationAxis::X => v_x_logic,
-                        RotationAxis::Y => v_y_logic,
-                        RotationAxis::Z => v_z_logic,
-                    };
-
-                    let dot_x = v_logic.dot(Vec3::X);
-                    let dot_y = v_logic.dot(Vec3::Y);
-                    let dot_z = v_logic.dot(Vec3::Z);
-
-                    let (phys_axis, phys_index, phys_direction) = if dot_x.abs() > 0.9 {
-                        if dot_x > 0.9 {
-                            (RotationAxis::X, logic_index, logic_direction)
-                        } else {
-                            (
-                                RotationAxis::X,
-                                size - 1 - logic_index,
-                                logic_direction.inverse(),
-                            )
-                        }
-                    } else if dot_y.abs() > 0.9 {
-                        if dot_y > 0.9 {
-                            (RotationAxis::Y, logic_index, logic_direction)
-                        } else {
-                            (
-                                RotationAxis::Y,
-                                size - 1 - logic_index,
-                                logic_direction.inverse(),
-                            )
-                        }
-                    } else if dot_z.abs() > 0.9 {
-                        if dot_z > 0.9 {
-                            (RotationAxis::Z, logic_index, logic_direction)
-                        } else {
-                            (
-                                RotationAxis::Z,
-                                size - 1 - logic_index,
-                                logic_direction.inverse(),
-                            )
-                        }
-                    } else {
-                        continue;
-                    };
-
-                    all_moves.push(RotationMove {
-                        axis: phys_axis,
-                        index: phys_index,
-                        direction: phys_direction,
-                        add_to_history: true,
-                    });
-                    continue;
-                }
-            }
-        }
-
-        let mut chars = part.chars();
-        let Some(first_char) = chars.next() else {
-            continue;
-        };
-
         match first_char {
             'X' | 'Y' | 'Z' => {
-                let axis = match first_char {
+                let logic_axis = match first_char {
                     'X' => RotationAxis::X,
                     'Y' => RotationAxis::Y,
                     _ => RotationAxis::Z,
@@ -508,22 +418,67 @@ pub fn logical_string_to_physical_moves_any(
                         break;
                     }
                 }
-                let Ok(idx) = index_str.parse::<i32>() else {
+
+                let Ok(logic_index) = index_str.parse::<i32>() else {
                     continue;
                 };
 
-                let is_inverse = modifier_char == Some('\'');
-                let is_double = modifier_char == Some('2');
-                let direction = if is_inverse {
+                let logic_direction = if modifier_char == Some('\'') {
                     Direction::CounterClockwise
                 } else {
                     Direction::Clockwise
                 };
 
+                let is_double = modifier_char == Some('2');
+
+                let v_logic = match logic_axis {
+                    RotationAxis::X => v_x_logic,
+                    RotationAxis::Y => v_y_logic,
+                    RotationAxis::Z => v_z_logic,
+                };
+
+                let dot_x = v_logic.dot(Vec3::X);
+                let dot_y = v_logic.dot(Vec3::Y);
+                let dot_z = v_logic.dot(Vec3::Z);
+
+                let (phys_axis, phys_index, phys_direction) = if dot_x.abs() > 0.9 {
+                    if dot_x > 0.9 {
+                        (RotationAxis::X, logic_index, logic_direction)
+                    } else {
+                        (
+                            RotationAxis::X,
+                            size - 1 - logic_index,
+                            logic_direction.inverse(),
+                        )
+                    }
+                } else if dot_y.abs() > 0.9 {
+                    if dot_y > 0.9 {
+                        (RotationAxis::Y, logic_index, logic_direction)
+                    } else {
+                        (
+                            RotationAxis::Y,
+                            size - 1 - logic_index,
+                            logic_direction.inverse(),
+                        )
+                    }
+                } else if dot_z.abs() > 0.9 {
+                    if dot_z > 0.9 {
+                        (RotationAxis::Z, logic_index, logic_direction)
+                    } else {
+                        (
+                            RotationAxis::Z,
+                            size - 1 - logic_index,
+                            logic_direction.inverse(),
+                        )
+                    }
+                } else {
+                    continue;
+                };
+
                 let m = RotationMove {
-                    axis,
-                    index: idx,
-                    direction,
+                    axis: phys_axis,
+                    index: phys_index,
+                    direction: phys_direction,
                     add_to_history: true,
                 };
                 all_moves.push(m);

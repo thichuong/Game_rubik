@@ -38,7 +38,6 @@ pub fn solve_nxn(
 
     // 4. Parity Verification and Correction
     // Try the 4 parity correction combinations to find the solvable 3x3 state
-    let mut final_3x3_state_str = String::new();
     let mut best_combo = None;
 
     let base_3x3_str = map_to_3x3_string(&state);
@@ -61,7 +60,6 @@ pub fn solve_nxn(
 
         if is_solvable_3x3(&temp_3x3) {
             best_combo = Some((try_oll, try_pll));
-            final_3x3_state_str = temp_3x3;
             break;
         }
     }
@@ -80,6 +78,10 @@ pub fn solve_nxn(
 
     state.apply_moves(&parity_moves);
     all_moves.extend(parity_moves);
+
+    // Re-scrape the 3x3 representation AFTER applying parity moves in virtual space
+    // to capture any orientation shifts perfectly!
+    let final_3x3_state_str = map_to_3x3_string(&state);
 
     // 5. Solve the mapped 3x3x3 state using the Kociemba 2-phase library
     let face_cube = kewb::FaceCube::try_from(final_3x3_state_str.as_str()).ok()?;
