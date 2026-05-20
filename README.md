@@ -1,6 +1,6 @@
-# 🌟 Rubik's Cube ECS - Modular 3D Game
+# 🌟 Rubik's Cube ECS - Modular 3D Game & Multi-Size Solver
 
-A premium, highly interactive 3D Rubik's Cube game and solver built from the ground up using **Rust** and the modern **Bevy Engine (v0.18)**. Featuring an elegant modular ECS architecture, studio-quality lighting, customizable skins, and an automated Kociemba step-by-step solver.
+A premium, highly interactive 3D Rubik's Cube game and solver built from the ground up using **Rust** and the modern **Bevy Engine (v0.18)**. Featuring an elegant modular ECS architecture, studio-quality lighting, customizable skins, and a mathematically robust automated multi-size solver ($N \ge 2$) using the Reduction method and Kociemba 2-phase algorithms.
 
 ---
 
@@ -10,8 +10,12 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
   - Smooth **Orbit Camera** with right-click drag navigation.
   - Precise mouse **Raycast Pick & Slice Rotation** (left-click and drag to rotate the exact slice you touch).
   - **✨ NEW: Real-Time Hand Tracking**: Control the entire Rubik's cube rotation and rotate individual slices using intuitive hand gestures in front of your webcam! Powered by Google MediaPipe Hands running in a lightweight Python background worker, synchronized with Bevy via real-time standard I/O piping (eliminating complex OpenCV C++ installation and compilation steps).
-- **🧠 Intelligent Automated Solver**:
-  - Integrated Kociemba's two-phase solver via the `kewb` library.
+- **🧠 Advanced Multi-Size Automated Solver ($N \ge 2$)**:
+  - **Modular Reduction Method** for big cubes ($N \ge 4$), supporting all sizes including **4x4x4** and **5x5x5** with 100% verification success rates!
+  - **BFS-based Setup Commutator Pathfinding** for solving center pieces while protecting already completed centers.
+  - **Edge Wing Pairing with Free Swap Slots** to safely align composite edge pieces.
+  - **Last Two Edges (L2E) and mathematical Parity Correction** (automated OLL and PLL parity resolution) to bridge arbitrary large states into a solvable core 3x3x3.
+  - Integrated Kociemba's two-phase solver via the `kewb` library for solving the final 3x3x3 core.
   - Full support for **Step-by-Step guided solving** with a modern overlay panel showing moves like `U`, `R'`, `F2`.
 - **🎨 Premium Visual & Skin Customization**:
   - Real-time texture switching with diverse skin designs: **Classic**, **Carbon Fiber**, **Geometric Pattern**, and **Floral Texture**.
@@ -91,12 +95,26 @@ Game_rubik/
 │   ├── fonts/               # UI fonts
 │   └── textures/            # Skins and SVG/PNG UI icons
 ├── hand_tracker/            # Lightweight Rust workspace library and Python MediaPipe background worker for camera-based gesture control
-├── src/                     # Rust Source Code (ECS Modules)
+├── rubik_solver/            # High-performance modular multi-size Rubik solver crate
+│   ├── src/
+│   │   ├── nxn/             # Dedicated solver for NxN cubes (N >= 4) using state reduction
+│   │   │   ├── centers.rs   # Setup + Commutator BFS pathfinding for solving centers
+│   │   │   ├── edges.rs     # BFS Wing pairing, free swap protector and L2E recovery
+│   │   │   ├── formulas.rs  # Commutators, OLL / PLL parity rotation sequences
+│   │   │   ├── parity.rs    # Solvability validation and virtual parity simulation
+│   │   │   ├── state.rs     # Virtual representation (NxNState) of the cubelets
+│   │   │   └── solver.rs    # Core reduction orchestrator (solve_nxn)
+│   │   ├── core.rs          # Shared data structures (Face, RotationMove, Direction)
+│   │   ├── helpers.rs       # Bevy physical entity scraping and string-to-move mapping
+│   │   ├── lib.rs           # Library entries and exports
+│   │   └── solver.rs        # Unified entrypoint (solve_cube_for_size)
+│   └── Cargo.toml           
+├── src/                     # Rust Source Code (ECS Bevy Modules)
 │   ├── camera/              # Orbit camera components and rotation systems
 │   ├── environment/         # Studio lights, shadow cast floor, environmental adjustments
 │   ├── input/               # Raycasting mouse interactions, slice selection & dragging, hand_tracking receiver
 │   ├── rubik/               # Rubik cube spawn logic, material/skin application, rotation animations
-│   ├── solver/              # State mapping to facelet notation & kewb solver interface
+│   ├── solver/              # State mapping to facelet notation & rubik_solver integration
 │   ├── ui/                  # Advanced Bevy UI buttons, camera feed panel, dropdowns and settings
 │   ├── events.rs            # Custom ECS event messages (CameraFrameEvent, HandRotationEvent, etc.)
 │   └── main.rs              # Application initialization and plugin assembly
