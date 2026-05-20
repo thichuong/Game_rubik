@@ -11,6 +11,7 @@
 )]
 
 use crate::core::{Direction, Face, RotationAxis, RotationMove};
+use crate::nxn::formulas;
 use crate::nxn::state::{FACES_ORDER, NxNState};
 use std::collections::{HashSet, VecDeque};
 
@@ -34,28 +35,46 @@ pub fn get_edge_wings(f1: Face, f2: Face, size: usize) -> Vec<bevy::prelude::IVe
     let mut wings = Vec::new();
     let s = size as i32;
 
-    let (a, b) = if (f1 as usize) < (f2 as usize) {
-        (f1, f2)
-    } else {
-        (f2, f1)
-    };
-
     for idx in 1..(s - 1) {
-        match (a, b) {
-            (Face::Up, Face::Back) => wings.push(bevy::prelude::IVec3::new(idx, s - 1, 0)),
-            (Face::Up, Face::Right) => wings.push(bevy::prelude::IVec3::new(s - 1, s - 1, idx)),
-            (Face::Up, Face::Front) => wings.push(bevy::prelude::IVec3::new(idx, s - 1, s - 1)),
-            (Face::Up, Face::Left) => wings.push(bevy::prelude::IVec3::new(0, s - 1, idx)),
+        match (f1, f2) {
+            (Face::Up, Face::Back) | (Face::Back, Face::Up) => {
+                wings.push(bevy::prelude::IVec3::new(idx, s - 1, 0))
+            }
+            (Face::Up, Face::Right) | (Face::Right, Face::Up) => {
+                wings.push(bevy::prelude::IVec3::new(s - 1, s - 1, idx))
+            }
+            (Face::Up, Face::Front) | (Face::Front, Face::Up) => {
+                wings.push(bevy::prelude::IVec3::new(idx, s - 1, s - 1))
+            }
+            (Face::Up, Face::Left) | (Face::Left, Face::Up) => {
+                wings.push(bevy::prelude::IVec3::new(0, s - 1, idx))
+            }
 
-            (Face::Down, Face::Back) => wings.push(bevy::prelude::IVec3::new(idx, 0, 0)),
-            (Face::Down, Face::Right) => wings.push(bevy::prelude::IVec3::new(s - 1, 0, idx)),
-            (Face::Down, Face::Front) => wings.push(bevy::prelude::IVec3::new(idx, 0, s - 1)),
-            (Face::Down, Face::Left) => wings.push(bevy::prelude::IVec3::new(0, 0, idx)),
+            (Face::Down, Face::Back) | (Face::Back, Face::Down) => {
+                wings.push(bevy::prelude::IVec3::new(idx, 0, 0))
+            }
+            (Face::Down, Face::Right) | (Face::Right, Face::Down) => {
+                wings.push(bevy::prelude::IVec3::new(s - 1, 0, idx))
+            }
+            (Face::Down, Face::Front) | (Face::Front, Face::Down) => {
+                wings.push(bevy::prelude::IVec3::new(idx, 0, s - 1))
+            }
+            (Face::Down, Face::Left) | (Face::Left, Face::Down) => {
+                wings.push(bevy::prelude::IVec3::new(0, 0, idx))
+            }
 
-            (Face::Front, Face::Right) => wings.push(bevy::prelude::IVec3::new(s - 1, idx, s - 1)),
-            (Face::Front, Face::Left) => wings.push(bevy::prelude::IVec3::new(0, idx, s - 1)),
-            (Face::Back, Face::Right) => wings.push(bevy::prelude::IVec3::new(s - 1, idx, 0)),
-            (Face::Back, Face::Left) => wings.push(bevy::prelude::IVec3::new(0, idx, 0)),
+            (Face::Front, Face::Right) | (Face::Right, Face::Front) => {
+                wings.push(bevy::prelude::IVec3::new(s - 1, idx, s - 1))
+            }
+            (Face::Front, Face::Left) | (Face::Left, Face::Front) => {
+                wings.push(bevy::prelude::IVec3::new(0, idx, s - 1))
+            }
+            (Face::Back, Face::Right) | (Face::Right, Face::Back) => {
+                wings.push(bevy::prelude::IVec3::new(s - 1, idx, 0))
+            }
+            (Face::Back, Face::Left) | (Face::Left, Face::Back) => {
+                wings.push(bevy::prelude::IVec3::new(0, idx, 0))
+            }
             _ => {}
         }
     }
@@ -82,7 +101,7 @@ fn get_wing_colors(
     Some((c1, c2))
 }
 
-/// Check if a composite edge is correctly paired (all wings have identical aligned colors)
+/// Check if a composite edge is correctly paired (all wings have correct colors matching their home faces f1 and f2)
 pub fn is_edge_paired(state: &NxNState, f1: Face, f2: Face) -> bool {
     let wings = get_edge_wings(f1, f2, state.size);
     if wings.is_empty() {
@@ -93,7 +112,7 @@ pub fn is_edge_paired(state: &NxNState, f1: Face, f2: Face) -> bool {
         return false;
     };
 
-    for &coord in &wings[1..] {
+    for &coord in &wings {
         let Some(colors) = get_wing_colors(state, coord, f1, f2) else {
             return false;
         };
@@ -109,78 +128,150 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
     let mut all_moves = Vec::new();
     let size = state.size;
 
-    // Keep track of paired edges
-    let mut paired_edges = HashSet::new();
-    for &(f1, f2) in &COMPOSITE_EDGES {
-        if is_edge_paired(state, f1, f2) {
-            paired_edges.insert((f1, f2));
+    for attempt in 0..5 {
+        println!("DEBUG: [pair_edges] Attempt {} starting...", attempt);
+        let mut paired_edges = HashSet::new();
+        for &(f1, f2) in &COMPOSITE_EDGES {
+            if is_edge_paired(state, f1, f2) {
+                paired_edges.insert((f1, f2));
+            }
         }
-    }
 
-    let mut loop_count = 0;
-    let max_loops = 100;
+        if paired_edges.len() == 12 {
+            println!(
+                "DEBUG: [pair_edges] SUCCESS! All 12 edges paired successfully after {} attempts.",
+                attempt
+            );
+            return Some(all_moves);
+        }
 
-    while paired_edges.len() < 10 && loop_count < max_loops {
-        loop_count += 1;
-        let mut progress = false;
+        let mut loop_count = 0;
+        let max_loops = 100;
+        let mut shuffle_count = 0;
+        let max_shuffles = 10;
 
-        'outer_pair: for &(f1, f2) in &COMPOSITE_EDGES {
-            if paired_edges.contains(&(f1, f2)) {
-                continue;
-            }
+        while paired_edges.len() < 12 && loop_count < max_loops {
+            loop_count += 1;
+            let mut progress = false;
 
-            let wings = get_edge_wings(f1, f2, size);
-            if wings.is_empty() {
-                continue;
-            }
+            println!(
+                "DEBUG: [pair_edges] Loop {} start. Paired: {}/12",
+                loop_count,
+                paired_edges.len()
+            );
 
-            let Some(target_colors) = get_wing_colors(state, wings[0], f1, f2) else {
-                continue;
-            };
-
-            for &dest_coord in &wings[1..] {
-                if let Some(colors) = get_wing_colors(state, dest_coord, f1, f2) {
-                    if colors == target_colors {
-                        continue;
-                    }
+            'outer_pair: for &(f1, f2) in &COMPOSITE_EDGES {
+                if paired_edges.contains(&(f1, f2)) {
+                    continue;
                 }
 
-                // Find an unpaired wing piece with matching colors
-                let mut src_coord_opt = None;
-                'src_search: for &(sf1, sf2) in &COMPOSITE_EDGES {
-                    if paired_edges.contains(&(sf1, sf2)) || (sf1 == f1 && sf2 == f2) {
+                let wings = get_edge_wings(f1, f2, size);
+                if wings.is_empty() {
+                    continue;
+                }
+
+                let target_colors = if size % 2 == 1 {
+                    let mid_wing = wings[wings.len() / 2];
+                    get_wing_colors(state, mid_wing, f1, f2).unwrap_or((f1, f2))
+                } else {
+                    get_wing_colors(state, wings[0], f1, f2).unwrap_or((f1, f2))
+                };
+
+                let mid_idx = wings.len() / 2;
+                for idx in 0..wings.len() {
+                    if size % 2 == 1 && idx == mid_idx {
                         continue;
                     }
-                    let swings = get_edge_wings(sf1, sf2, size);
-                    for &sc in &swings {
-                        if let Some(colors) = get_wing_colors(state, sc, sf1, sf2) {
-                            if (colors.0 == target_colors.0 && colors.1 == target_colors.1)
-                                || (colors.0 == target_colors.1 && colors.1 == target_colors.0)
-                            {
-                                src_coord_opt = Some(sc);
-                                break 'src_search;
+                    let dest_coord = wings[idx];
+
+                    if let Some(colors) = get_wing_colors(state, dest_coord, f1, f2) {
+                        if colors == target_colors {
+                            continue;
+                        }
+                    }
+
+                    let mut src_coord_opt = None;
+                    'find_src: for &(f_a, f_b) in &COMPOSITE_EDGES {
+                        if f_a == f1 && f_b == f2 {
+                            continue;
+                        }
+                        let candidate_wings = get_edge_wings(f_a, f_b, size);
+                        let c_mid_idx = candidate_wings.len() / 2;
+                        for c_idx in 0..candidate_wings.len() {
+                            if size % 2 == 1 && c_idx == c_mid_idx {
+                                continue;
+                            }
+                            let cand = candidate_wings[c_idx];
+                            if let Some(cand_colors) = get_wing_colors(state, cand, f_a, f_b) {
+                                if cand_colors == target_colors
+                                    || (cand_colors.0 == target_colors.1
+                                        && cand_colors.1 == target_colors.0)
+                                {
+                                    src_coord_opt = Some(cand);
+                                    break 'find_src;
+                                }
                             }
                         }
                     }
+
+                    let Some(src_coord) = src_coord_opt else {
+                        println!(
+                            "DEBUG: [pair_edges] Matching winglet not found for dest: {:?} (colors: {:?})",
+                            dest_coord, target_colors
+                        );
+                        continue;
+                    };
+
+                    println!(
+                        "DEBUG: [pair_edges] Trying to pair wing. src: {:?} -> dest: {:?}, target_colors: {:?}",
+                        src_coord, dest_coord, target_colors
+                    );
+                    if let Some(moves) = solve_single_wing(
+                        state,
+                        src_coord,
+                        dest_coord,
+                        target_colors,
+                        size,
+                        (f1, f2),
+                    ) {
+                        println!("DEBUG: [pair_edges] SUCCESS! Found moves: {:?}", moves);
+                        state.apply_moves(&moves);
+                        all_moves.extend(moves);
+                        progress = true;
+                        break 'outer_pair;
+                    } else {
+                        println!("DEBUG: [pair_edges] FAILED to find moves via BFS!");
+                    }
                 }
+            }
 
-                let Some(src_coord) = src_coord_opt else {
-                    continue;
-                };
+            paired_edges.clear();
+            for &(f1, f2) in &COMPOSITE_EDGES {
+                if is_edge_paired(state, f1, f2) {
+                    paired_edges.insert((f1, f2));
+                }
+            }
 
-                // Run fast geometry BFS to pair this wing
-                if let Some(moves) = solve_single_wing(state, src_coord, dest_coord, size) {
-                    state.apply_moves(&moves);
-                    all_moves.extend(moves);
-                    progress = true;
-                    break 'outer_pair;
+            if !progress {
+                if paired_edges.len() < 10 && shuffle_count < max_shuffles {
+                    shuffle_count += 1;
+                    let generators = get_outer_generators(size);
+                    let m = generators[(shuffle_count * 7) % generators.len()];
+                    state.apply_move(m);
+                    all_moves.push(m);
+
+                    paired_edges.clear();
+                    for &(f1, f2) in &COMPOSITE_EDGES {
+                        if is_edge_paired(state, f1, f2) {
+                            paired_edges.insert((f1, f2));
+                        }
+                    }
                 } else {
-                    return None;
+                    break;
                 }
             }
         }
 
-        // Dynamically update paired edges list
         paired_edges.clear();
         for &(f1, f2) in &COMPOSITE_EDGES {
             if is_edge_paired(state, f1, f2) {
@@ -188,59 +279,107 @@ pub fn pair_edges(state: &mut NxNState) -> Option<Vec<RotationMove>> {
             }
         }
 
-        if !progress {
-            break;
+        if paired_edges.len() == 12 {
+            println!(
+                "DEBUG: [pair_edges] SUCCESS! All 12 edges paired successfully after {} attempts.",
+                attempt
+            );
+            return Some(all_moves);
         }
-    }
 
-    // Solve Last Two Edges (L2E) if there are exactly 2 unpaired edges left
-    let unpaired_edges: Vec<(Face, Face)> = COMPOSITE_EDGES
-        .iter()
-        .copied()
-        .filter(|&edge| !is_edge_paired(state, edge.0, edge.1))
-        .collect();
+        let unpaired_edges: Vec<(Face, Face)> = COMPOSITE_EDGES
+            .iter()
+            .copied()
+            .filter(|&edge| !is_edge_paired(state, edge.0, edge.1))
+            .collect();
 
-    if unpaired_edges.len() == 2 {
-        let edge1 = unpaired_edges[0];
-        let edge2 = unpaired_edges[1];
+        if unpaired_edges.len() == 2 {
+            let edge1 = unpaired_edges[0];
+            let edge2 = unpaired_edges[1];
 
-        if let Some(setup_moves) = find_l2e_setup(edge1, edge2, size) {
-            state.apply_moves(&setup_moves);
-            all_moves.extend(setup_moves.clone());
+            println!(
+                "DEBUG: [pair_edges] Bắt đầu giải L2E cho {:?} và {:?}",
+                edge1, edge2
+            );
+            if let Some(setup_moves) = find_l2e_setup(edge1, edge2, size) {
+                println!(
+                    "DEBUG: [pair_edges] Tìm thấy L2E setup moves: {:?}",
+                    setup_moves
+                );
+                state.apply_moves(&setup_moves);
+                all_moves.extend(setup_moves.clone());
 
-            let wings1 = get_edge_wings(Face::Front, Face::Left, size);
-            let wings2 = get_edge_wings(Face::Front, Face::Right, size);
+                let wings_fl = get_edge_wings(Face::Front, Face::Left, size);
+                let wings_fr = get_edge_wings(Face::Front, Face::Right, size);
 
-            for idx in 0..wings1.len() {
-                let w1_coord = wings1[idx];
-                let w2_coord = wings2[idx];
-                let c1 = get_wing_colors(state, w1_coord, Face::Front, Face::Left);
-                let c2 = get_wing_colors(state, w2_coord, Face::Front, Face::Right);
+                if !wings_fl.is_empty() && !wings_fr.is_empty() {
+                    let ref_idx = if size % 2 == 1 { wings_fl.len() / 2 } else { 0 };
+                    if let Some(ref_color) =
+                        get_wing_colors(state, wings_fl[ref_idx], Face::Front, Face::Left)
+                    {
+                        for idx in 0..wings_fl.len() {
+                            if idx == ref_idx {
+                                continue;
+                            }
+                            let w_fl = wings_fl[idx];
+                            if let Some(c_fl) =
+                                get_wing_colors(state, w_fl, Face::Front, Face::Left)
+                            {
+                                println!(
+                                    "DEBUG: [pair_edges] L2E kiểm tra winglet tại index {}: FL {:?} vs ref_color {:?}",
+                                    idx, c_fl, ref_color
+                                );
+                                if c_fl != ref_color {
+                                    println!(
+                                        "DEBUG: [pair_edges] L2E mảnh lệch! Áp dụng L2E Multi-layer Fix cho slice index {}",
+                                        w_fl.y
+                                    );
+                                    let slice_idx = w_fl.y;
 
-                if c1 != c2 {
-                    let slice_idx = w1_coord.y;
-                    let l2e_moves = get_l2e_formula_moves(size, slice_idx);
-                    state.apply_moves(&l2e_moves);
-                    all_moves.extend(l2e_moves);
+                                    let mut l2e_moves = Vec::new();
+                                    l2e_moves.push(RotationMove {
+                                        axis: RotationAxis::Z,
+                                        index: (size as i32) - 1,
+                                        direction: Direction::CounterClockwise,
+                                        add_to_history: true,
+                                    });
+                                    l2e_moves.extend(get_oll_parity_moves(size, slice_idx));
+                                    l2e_moves.push(RotationMove {
+                                        axis: RotationAxis::Z,
+                                        index: (size as i32) - 1,
+                                        direction: Direction::Clockwise,
+                                        add_to_history: true,
+                                    });
+
+                                    state.apply_moves(&l2e_moves);
+                                    all_moves.extend(l2e_moves);
+                                }
+                            }
+                        }
+                    }
                 }
-            }
 
-            // Undo L2E setup
-            let mut undo_setup = setup_moves;
-            undo_setup.reverse();
-            for m in &mut undo_setup {
-                *m = m.inverse();
+                let mut undo_setup = setup_moves;
+                undo_setup.reverse();
+                for m in &mut undo_setup {
+                    *m = m.inverse();
+                }
+                state.apply_moves(&undo_setup);
+                all_moves.extend(undo_setup);
             }
-            state.apply_moves(&undo_setup);
-            all_moves.extend(undo_setup);
         }
     }
 
-    // Verify all edges are correctly paired at the end
+    let mut all_ok = true;
     for &(f1, f2) in &COMPOSITE_EDGES {
         if !is_edge_paired(state, f1, f2) {
-            return None;
+            println!("DEBUG: [pair_edges] CẠNH LỖI CUỐI CÙNG: {:?}", (f1, f2));
+            all_ok = false;
         }
+    }
+
+    if !all_ok {
+        return None;
     }
 
     Some(all_moves)
@@ -295,53 +434,188 @@ fn get_outer_generators(size: usize) -> Vec<RotationMove> {
     moves
 }
 
-/// Standard Flipping Macro: R U R' F R' F' R
-fn get_flipping_macro(size: usize) -> Vec<RotationMove> {
-    let s = size as i32;
-    vec![
-        RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::Y,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::Z,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::Z,
-            index: s - 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        },
-        RotationMove {
-            axis: RotationAxis::X,
-            index: s - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        },
-    ]
+/// Count the number of currently fully paired composite edges
+fn count_paired_edges(state: &NxNState) -> usize {
+    COMPOSITE_EDGES
+        .iter()
+        .filter(|&&(f1, f2)| is_edge_paired(state, f1, f2))
+        .count()
+}
+
+/// Find all setup and undo moves to place any free (unpaired) edge at the Up-Right (UR) swap position
+fn get_all_free_swap_candidates(state: &NxNState) -> Vec<(Vec<RotationMove>, Vec<RotationMove>)> {
+    let size = state.size;
+    let s_idx = (size - 1) as i32;
+    let mut candidates = Vec::new();
+
+    // 1. Scan Up face first
+    let up_edges = [
+        ((Face::Up, Face::Right), Vec::new(), Vec::new()),
+        (
+            (Face::Up, Face::Front),
+            vec![RotationMove {
+                axis: RotationAxis::Y,
+                index: s_idx,
+                direction: Direction::CounterClockwise,
+                add_to_history: true,
+            }],
+            vec![RotationMove {
+                axis: RotationAxis::Y,
+                index: s_idx,
+                direction: Direction::Clockwise,
+                add_to_history: true,
+            }],
+        ),
+        (
+            (Face::Up, Face::Left),
+            vec![
+                RotationMove {
+                    axis: RotationAxis::Y,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::Y,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+            vec![
+                RotationMove {
+                    axis: RotationAxis::Y,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::Y,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+        ),
+        (
+            (Face::Up, Face::Back),
+            vec![RotationMove {
+                axis: RotationAxis::Y,
+                index: s_idx,
+                direction: Direction::Clockwise,
+                add_to_history: true,
+            }],
+            vec![RotationMove {
+                axis: RotationAxis::Y,
+                index: s_idx,
+                direction: Direction::CounterClockwise,
+                add_to_history: true,
+            }],
+        ),
+    ];
+
+    for (edge, setup, undo) in &up_edges {
+        if !is_edge_paired(state, edge.0, edge.1) {
+            candidates.push((setup.clone(), undo.clone()));
+        }
+    }
+
+    // 2. Scan Down face
+    let down_edges = [
+        (
+            (Face::Down, Face::Right),
+            vec![
+                RotationMove {
+                    axis: RotationAxis::X,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::X,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+        ),
+        (
+            (Face::Down, Face::Front),
+            vec![
+                RotationMove {
+                    axis: RotationAxis::Z,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::Z,
+                    index: s_idx,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+        ),
+        (
+            (Face::Down, Face::Left),
+            vec![
+                RotationMove {
+                    axis: RotationAxis::X,
+                    index: 0,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::X,
+                    index: 0,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+        ),
+        (
+            (Face::Down, Face::Back),
+            vec![
+                RotationMove {
+                    axis: RotationAxis::Z,
+                    index: 0,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+                RotationMove {
+                    axis: RotationAxis::Z,
+                    index: 0,
+                    direction: Direction::Clockwise,
+                    add_to_history: true,
+                },
+            ],
+        ),
+    ];
+
+    for (edge, to_up) in &down_edges {
+        if !is_edge_paired(state, edge.0, edge.1) {
+            let up_equivalent = match edge {
+                (Face::Down, Face::Right) => (Face::Up, Face::Right),
+                (Face::Down, Face::Front) => (Face::Up, Face::Front),
+                (Face::Down, Face::Left) => (Face::Up, Face::Left),
+                (Face::Down, Face::Back) => (Face::Up, Face::Back),
+                _ => unreachable!(),
+            };
+
+            let up_setup_opt = up_edges.iter().find(|(ue, _, _)| *ue == up_equivalent);
+            if let Some((_, up_setup, up_undo)) = up_setup_opt {
+                let mut full_setup = to_up.clone();
+                full_setup.extend(up_setup.clone());
+
+                let mut full_undo = up_undo.clone();
+                full_undo.extend(to_up.clone());
+
+                candidates.push((full_setup, full_undo));
+            }
+        }
+    }
+
+    candidates
 }
 
 /// BFS to find setup moves for a single wing pairing using only outer face moves
@@ -349,7 +623,9 @@ fn solve_single_wing(
     state: &NxNState,
     src: bevy::prelude::IVec3,
     dest: bevy::prelude::IVec3,
+    target_colors: (Face, Face),
     size: usize,
+    _edge: (Face, Face),
 ) -> Option<Vec<RotationMove>> {
     let s = size as i32;
     let generators = get_outer_generators(size);
@@ -360,7 +636,7 @@ fn solve_single_wing(
     let mut visited = HashSet::new();
     visited.insert((src, dest));
 
-    let max_setup_depth = 4;
+    let max_setup_depth = 8;
 
     while let Some((moves, curr_src, curr_dest)) = queue.pop_front() {
         // Target: dest at FR (s-1, slice_idx, s-1), src at FL (0, slice_idx, s-1)
@@ -373,16 +649,14 @@ fn solve_single_wing(
             && curr_dest.y < s - 1
         {
             let slice_idx = curr_dest.y;
-            let y_ref = if slice_idx == 1 { s - 2 } else { 1 };
 
             let mut temp_state = state.clone();
             temp_state.apply_moves(&moves);
 
-            // Try slice 90 degrees Clockwise to check color alignment
             let slice_move = RotationMove {
                 axis: RotationAxis::Y,
                 index: slice_idx,
-                direction: Direction::Clockwise,
+                direction: Direction::CounterClockwise,
                 add_to_history: true,
             };
             let mut test_state = temp_state.clone();
@@ -394,21 +668,171 @@ fn solve_single_wing(
                 Face::Front,
                 Face::Right,
             ) {
-                if let Some(colors_ref) = get_wing_colors(
-                    &test_state,
-                    bevy::prelude::IVec3::new(s - 1, y_ref, s - 1),
-                    Face::Front,
-                    Face::Right,
-                ) {
-                    if colors_at_slice == colors_ref {
-                        // Found valid setup!
+                let count_slot_paired = |s_state: &NxNState| -> usize {
+                    let wings = get_edge_wings(_edge.0, _edge.1, size);
+                    if wings.is_empty() {
+                        return 0;
+                    }
+                    let anchor_idx = if size % 2 == 1 { wings.len() / 2 } else { 0 };
+                    let Some(anchor_colors) =
+                        get_wing_colors(s_state, wings[anchor_idx], _edge.0, _edge.1)
+                    else {
+                        return 0;
+                    };
+
+                    let mut count = 0;
+                    for idx in 0..wings.len() {
+                        if size % 2 == 1 && idx == anchor_idx {
+                            continue;
+                        }
+                        if let Some(colors) = get_wing_colors(s_state, wings[idx], _edge.0, _edge.1)
+                        {
+                            if colors == anchor_colors {
+                                count += 1;
+                            }
+                        }
+                    }
+                    count
+                };
+
+                let orig_paired = count_paired_edges(state);
+                let orig_slot_total = count_slot_paired(state);
+
+                let candidates = get_all_free_swap_candidates(&temp_state);
+                let mut best_seq = None;
+                let mut best_slot_total = orig_slot_total;
+
+                println!(
+                    "DEBUG: [solve_single_wing] Found FL/FR! moves_len: {}, target_colors: {:?}, colors_at_slice: {:?}, candidates: {}, orig_slot_total: {}",
+                    moves.len(),
+                    target_colors,
+                    colors_at_slice,
+                    candidates.len(),
+                    orig_slot_total
+                );
+
+                for (swap_setup, swap_undo) in &candidates {
+                    // Case 1: So Le (Nghịch màu - Chuẩn ghép)
+                    if colors_at_slice.0 == target_colors.0 && colors_at_slice.1 == target_colors.1
+                    {
                         let mut full_sequence = moves.clone();
+                        full_sequence.extend(swap_setup.clone());
                         full_sequence.push(slice_move);
-                        full_sequence.extend(get_flipping_macro(size));
+                        full_sequence.extend(formulas::get_edge_flip_algo(size));
                         full_sequence.push(slice_move.inverse());
+                        full_sequence.extend(swap_undo.clone());
                         for m in moves.iter().rev() {
                             full_sequence.push(m.inverse());
                         }
+
+                        // Simulate to protect paired edges and active edge winglets
+                        let mut sim_state = state.clone();
+                        sim_state.apply_moves(&full_sequence);
+                        let new_paired = count_paired_edges(&sim_state);
+                        let new_slot_total = count_slot_paired(&sim_state);
+
+                        let is_progress = new_paired > orig_paired
+                            || (new_paired == orig_paired && new_slot_total > best_slot_total);
+                        if is_progress {
+                            println!(
+                                "DEBUG: [solve_single_wing] Case 1 ACCEPT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
+                                new_paired, new_slot_total, orig_paired, orig_slot_total
+                            );
+                            best_slot_total = new_slot_total;
+                            best_seq = Some(full_sequence);
+                        } else {
+                            println!(
+                                "DEBUG: [solve_single_wing] Case 1 REJECT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
+                                new_paired, new_slot_total, orig_paired, orig_slot_total
+                            );
+                        }
+                    }
+                    // Case 2: Song Song (Hợp màu - Cần lật FR trước)
+                    else if colors_at_slice.0 == target_colors.1
+                        && colors_at_slice.1 == target_colors.0
+                    {
+                        let mut full_sequence = moves.clone();
+                        full_sequence.extend(swap_setup.clone());
+                        full_sequence.extend(formulas::get_edge_flip_algo(size)); // Lật FR trước
+                        full_sequence.push(slice_move);
+                        full_sequence.extend(formulas::get_edge_flip_algo(size)); // EDGE_PAIR_STANDARD
+                        full_sequence.push(slice_move.inverse());
+                        full_sequence.extend(swap_undo.clone());
+                        for m in moves.iter().rev() {
+                            full_sequence.push(m.inverse());
+                        }
+
+                        // Simulate to protect paired edges and active edge winglets
+                        let mut sim_state = state.clone();
+                        sim_state.apply_moves(&full_sequence);
+                        let new_paired = count_paired_edges(&sim_state);
+                        let new_slot_total = count_slot_paired(&sim_state);
+
+                        let is_progress = new_paired > orig_paired
+                            || (new_paired == orig_paired && new_slot_total > best_slot_total);
+                        if is_progress {
+                            println!(
+                                "DEBUG: [solve_single_wing] Case 2 ACCEPT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
+                                new_paired, new_slot_total, orig_paired, orig_slot_total
+                            );
+                            best_slot_total = new_slot_total;
+                            best_seq = Some(full_sequence);
+                        } else {
+                            println!(
+                                "DEBUG: [solve_single_wing] Case 2 REJECT: new_paired = {}, new_slot_total = {} (orig_paired = {}, orig_slot_total = {})",
+                                new_paired, new_slot_total, orig_paired, orig_slot_total
+                            );
+                        }
+                    }
+                }
+
+                if let Some(seq) = best_seq {
+                    return Some(seq);
+                }
+
+                // Fallback to legacy logic without swap if no free edge candidate works (extremely rare but safe)
+                // Case 1: So Le
+                if colors_at_slice.0 == target_colors.0 && colors_at_slice.1 == target_colors.1 {
+                    let mut full_sequence = moves.clone();
+                    full_sequence.push(slice_move);
+                    full_sequence.extend(formulas::get_edge_flip_algo(size));
+                    full_sequence.push(slice_move.inverse());
+                    for m in moves.iter().rev() {
+                        full_sequence.push(m.inverse());
+                    }
+
+                    let mut sim_state = state.clone();
+                    sim_state.apply_moves(&full_sequence);
+                    let new_paired = count_paired_edges(&sim_state);
+                    let new_slot_total = count_slot_paired(&sim_state);
+
+                    let is_progress = new_paired > orig_paired
+                        || (new_paired == orig_paired && new_slot_total > orig_slot_total);
+                    if is_progress {
+                        return Some(full_sequence);
+                    }
+                }
+                // Case 2: Song Song
+                else if colors_at_slice.0 == target_colors.1
+                    && colors_at_slice.1 == target_colors.0
+                {
+                    let mut full_sequence = moves.clone();
+                    full_sequence.extend(formulas::get_edge_flip_algo(size));
+                    full_sequence.push(slice_move);
+                    full_sequence.extend(formulas::get_edge_flip_algo(size));
+                    full_sequence.push(slice_move.inverse());
+                    for m in moves.iter().rev() {
+                        full_sequence.push(m.inverse());
+                    }
+
+                    let mut sim_state = state.clone();
+                    sim_state.apply_moves(&full_sequence);
+                    let new_paired = count_paired_edges(&sim_state);
+                    let new_slot_total = count_slot_paired(&sim_state);
+
+                    let is_progress = new_paired > orig_paired
+                        || (new_paired == orig_paired && new_slot_total > orig_slot_total);
+                    if is_progress {
                         return Some(full_sequence);
                     }
                 }
@@ -457,10 +881,12 @@ fn find_l2e_setup(
     let mut visited = HashSet::new();
     visited.insert((start_pos1, start_pos2));
 
-    let max_depth = 4;
+    let max_depth = 8;
 
     while let Some((moves, p1, p2)) = queue.pop_front() {
-        if p1.x == 0 && p1.z == s - 1 && p2.x == s - 1 && p2.z == s - 1 {
+        let at_fl = |p: bevy::prelude::IVec3| p.x == 0 && p.z == s - 1;
+        let at_fr = |p: bevy::prelude::IVec3| p.x == s - 1 && p.z == s - 1;
+        if (at_fl(p1) && at_fr(p2)) || (at_fr(p1) && at_fl(p2)) {
             return Some(moves);
         }
 
@@ -483,8 +909,8 @@ fn find_l2e_setup(
     None
 }
 
-/// Standard L2E wing pairing formula moves for layer slice_idx
-fn get_l2e_formula_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
+/// Helper to construct edge-preserving slice OLL Parity moves for NxN Rubik
+fn get_oll_parity_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
     let s = size as i32;
     let r_idx = s - 1 - slice_idx;
     let l_idx = slice_idx;
@@ -493,6 +919,12 @@ fn get_l2e_formula_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
         axis: RotationAxis::X,
         index: r_idx,
         direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+    let r_ccw = RotationMove {
+        axis: RotationAxis::X,
+        index: r_idx,
+        direction: Direction::CounterClockwise,
         add_to_history: true,
     };
     let l_cw = RotationMove {
@@ -508,13 +940,19 @@ fn get_l2e_formula_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
         add_to_history: true,
     };
 
-    let u = RotationMove {
+    let u_cw = RotationMove {
         axis: RotationAxis::Y,
         index: s - 1,
         direction: Direction::Clockwise,
         add_to_history: true,
     };
-    let f = RotationMove {
+    let b_cw = RotationMove {
+        axis: RotationAxis::Z,
+        index: 0,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    };
+    let f_cw = RotationMove {
         axis: RotationAxis::Z,
         index: s - 1,
         direction: Direction::Clockwise,
@@ -522,7 +960,22 @@ fn get_l2e_formula_moves(size: usize, slice_idx: i32) -> Vec<RotationMove> {
     };
 
     vec![
-        r_cw, u, u, r_cw, u, u, f, f, r_cw, f, f, l_ccw, u, u, l_cw, u, u, r_cw, r_cw,
+        // r2
+        r_cw, r_cw, // B2
+        b_cw, b_cw, // U2
+        u_cw, u_cw, // l
+        l_cw, // U2
+        u_cw, u_cw, // r'
+        r_ccw, // U2
+        u_cw, u_cw, // r
+        r_cw, // U2
+        u_cw, u_cw, // F2
+        f_cw, f_cw, // r
+        r_cw, // F2
+        f_cw, f_cw, // l'
+        l_ccw, // B2
+        b_cw, b_cw, // r2
+        r_cw, r_cw,
     ]
 }
 

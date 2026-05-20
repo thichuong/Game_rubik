@@ -160,3 +160,132 @@ pub fn get_center_l2c_mid(size: usize) -> Vec<RotationMove> {
         get_m_move(size, Direction::CounterClockwise),
     ]
 }
+
+/// Target: Edge Flip Algorithm (EDGE_FLIP_ALGO)
+/// Formula: R U R' F R' F' R
+/// Function: Flips the orientation of the edge at the Front-Right (FR) position
+pub fn get_edge_flip_algo(size: usize) -> Vec<RotationMove> {
+    let s = size as i32;
+    vec![
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Z,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Z,
+            index: s - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+    ]
+}
+
+/// Target: Standard Edge Pairing (EDGE_PAIR_STANDARD)
+/// Formula: u' (R U R' F R' F' R) u
+/// Function: Pairs two wings brought to the Front-Right and Front-Left positions at slice_idx
+pub fn get_edge_pair_standard(size: usize, slice_idx: i32) -> Vec<RotationMove> {
+    let mut moves = vec![RotationMove {
+        axis: RotationAxis::Y,
+        index: slice_idx,
+        direction: Direction::CounterClockwise,
+        add_to_history: true,
+    }];
+    moves.extend(get_edge_flip_algo(size));
+    moves.push(RotationMove {
+        axis: RotationAxis::Y,
+        index: slice_idx,
+        direction: Direction::Clockwise,
+        add_to_history: true,
+    });
+    moves
+}
+
+/// Target: Last Two Edges Fix (LAST_TWO_EDGES_FIX)
+/// Formula: d R F' U R' F d'
+/// Function: Resolves parity or correctly pairs the last two remaining edge groups
+pub fn get_last_two_edges_fix(size: usize, slice_idx: i32) -> Vec<RotationMove> {
+    let s = size as i32;
+    vec![
+        // d
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: slice_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        // R
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        // F'
+        RotationMove {
+            axis: RotationAxis::Z,
+            index: s - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        // U
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        // R'
+        RotationMove {
+            axis: RotationAxis::X,
+            index: s - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        // F
+        RotationMove {
+            axis: RotationAxis::Z,
+            index: s - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        // d'
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: slice_idx,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+    ]
+}
