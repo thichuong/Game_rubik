@@ -246,7 +246,10 @@ fn run_full_solver_demo(size: usize, seed: u64, scramble_steps: usize, table: &k
     if parity_moves.is_empty() {
         println!("   No parity correction needed.");
     } else {
-        println!("   Applying parity correction ({} moves)...", parity_moves.len());
+        println!(
+            "   Applying parity correction ({} moves)...",
+            parity_moves.len()
+        );
         state.apply_moves(&parity_moves);
         println!("--- [ State after Parity Correction ] ---");
         print_cube_faces(&state);
@@ -277,11 +280,8 @@ fn run_full_solver_demo(size: usize, seed: u64, scramble_steps: usize, table: &k
 
     // Translate logic moves to NxN physical moves
     let mapping = FaceMapping::default();
-    let physical_3x3_moves = rubik_solver::helpers::logical_string_to_physical_moves_any(
-        &sol_str,
-        size as i32,
-        mapping,
-    );
+    let physical_3x3_moves =
+        rubik_solver::helpers::logical_string_to_physical_moves_any(&sol_str, size as i32, mapping);
     state.apply_moves(&physical_3x3_moves);
     println!(
         "   [SUCCESS] Reduced 3x3 solved in {} moves. (Time: {:?})",

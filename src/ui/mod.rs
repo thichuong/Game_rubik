@@ -17,6 +17,7 @@ impl Plugin for UiPlugin {
                     interactions::handle_shuffle_button,
                     interactions::handle_solve_button,
                     interactions::handle_next_step_button,
+                    interactions::handle_run_all_button,
                     interactions::handle_close_button,
                     interactions::update_solution_panel,
                     interactions::handle_skin_button,

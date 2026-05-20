@@ -12,6 +12,9 @@ pub struct SolveButton;
 pub struct NextStepButton;
 
 #[derive(Component)]
+pub struct RunAllButton;
+
+#[derive(Component)]
 pub struct SolutionPanel;
 
 #[derive(Component)]

@@ -6,10 +6,10 @@ use crate::rubik::resources::{FaceMapping, MoveHistory, RotationQueue, RubikSize
 use crate::ui::components::{
     CameraFeedImage, CameraTrackingButton, CameraTrackingText, CloseButton, EnvControl, EnvList,
     EnvToggleButton, ExitButton, MappingControl, MappingList, MappingOrderText,
-    MappingToggleButton, NextStepButton, ScrollContentWrapper, ShuffleButton, SidebarScrollHandle,
-    SidebarScrollState, SidebarScrollable, SizeDecrementButton, SizeIncrementButton,
-    SizeSliderFill, SizeSliderHandle, SizeSliderTrack, SizeText, SkinButton, SkinList,
-    SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText, StepText,
+    MappingToggleButton, NextStepButton, RunAllButton, ScrollContentWrapper, ShuffleButton,
+    SidebarScrollHandle, SidebarScrollState, SidebarScrollable, SizeDecrementButton,
+    SizeIncrementButton, SizeSliderFill, SizeSliderHandle, SizeSliderTrack, SizeText, SkinButton,
+    SkinList, SkinToggleButton, SolutionPanel, SolveButton, SolveButtonText, StepText,
 };
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
@@ -187,6 +187,47 @@ pub fn handle_next_step_button(
     }
 }
 
+pub fn handle_run_all_button(
+    mut interaction_query: InteractionQuery<RunAllButton>,
+    mut solution: ResMut<StepByStepSolution>,
+    mut rotation_queue: ResMut<RotationQueue>,
+    rubik_size: Res<RubikSize>,
+    face_mapping: Res<FaceMapping>,
+) {
+    for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.2, 0.4, 0.55, 1.0)));
+                *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.3, 0.7, 0.9, 1.0)));
+
+                if solution.active && solution.current_step < solution.moves.len() {
+                    // Feed all remaining steps into the rotation queue sequentially
+                    for i in solution.current_step..solution.moves.len() {
+                        let move_str = &solution.moves[i];
+                        let moves = helpers::logical_string_to_physical_moves_any(
+                            move_str,
+                            rubik_size.size,
+                            *face_mapping,
+                        );
+                        for m in moves {
+                            rotation_queue.0.push_back(m);
+                        }
+                    }
+                    solution.current_step = solution.moves.len();
+                }
+            }
+            Interaction::Hovered => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.12, 0.22, 0.32, 0.9)));
+                *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.25, 0.5, 0.65, 0.7)));
+            }
+            Interaction::None => {
+                *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.18, 0.25, 0.9)));
+                *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.4, 0.5, 0.6)));
+            }
+        }
+    }
+}
+
 pub fn update_solution_panel(
     solution: Res<StepByStepSolution>,
     mut panel: Single<&mut Node, With<SolutionPanel>>,
@@ -206,20 +247,35 @@ pub fn update_solution_panel(
                 if solution.current_step >= solution.moves.len() {
                     text.0 = "Solved!".to_string();
                 } else {
-                    let mut full_text = String::new();
-                    for (i, m) in solution.moves.iter().enumerate() {
-                        if i == solution.current_step {
-                            let _ = write!(full_text, " >>{m}<< ");
+                    let total_moves = solution.moves.len();
+                    let current = solution.current_step;
+
+                    // Implement a sliding window of size 7 around current_step to prevent UI overflow and lag.
+                    // This shows up to 3 moves before, the current highlighted move, and up to 3 moves after.
+                    let window_half = 3;
+                    let start = current.saturating_sub(window_half);
+                    let end = (current + window_half + 1).min(total_moves);
+
+                    let mut window_text = String::new();
+
+                    if start > 0 {
+                        let _ = write!(window_text, "... ");
+                    }
+
+                    for i in start..end {
+                        let m = &solution.moves[i];
+                        if i == current {
+                            let _ = write!(window_text, " >>{m}<< ");
                         } else {
-                            let _ = write!(full_text, " {m} ");
+                            let _ = write!(window_text, " {m} ");
                         }
                     }
-                    text.0 = format!(
-                        "Step {}/{}\n\n{}",
-                        solution.current_step + 1,
-                        solution.moves.len(),
-                        full_text
-                    );
+
+                    if end < total_moves {
+                        let _ = write!(window_text, " ...");
+                    }
+
+                    text.0 = format!("Step {}/{}\n\n{}", current + 1, total_moves, window_text);
                 }
             }
         }

@@ -1,4 +1,4 @@
-use crate::ui::components::{CloseButton, NextStepButton, StepText};
+use crate::ui::components::{CloseButton, NextStepButton, RunAllButton, StepText};
 use bevy::ecs::prelude::ChildSpawnerCommands;
 use bevy::prelude::*;
 
@@ -101,32 +101,71 @@ fn spawn_hud_details_row(parent: &mut ChildSpawnerCommands, font: &Handle<Font>)
                 ));
             });
 
-            // Right Column: Action Button
-            p.spawn((
-                Button,
-                Node {
-                    width: Val::Px(140.0),
-                    height: Val::Px(42.0),
-                    border: UiRect::all(Val::Px(1.5)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border_radius: BorderRadius::all(Val::Px(10.0)),
-                    ..default()
-                },
-                BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6))),
-                BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.9))),
-                NextStepButton,
-            ))
-            .with_children(|btn: &mut ChildSpawnerCommands| {
-                btn.spawn((
-                    Text::new("NEXT STEP"),
-                    TextFont {
-                        font_size: 14.0,
-                        font: font.clone(),
-                        ..default()
-                    },
-                    TextColor(Color::Srgba(Srgba::WHITE)),
-                ));
+            // Right Column: Action Buttons (NEXT STEP & RUN ALL)
+            p.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(10.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|btn_container: &mut ChildSpawnerCommands| {
+                // NEXT STEP Button
+                btn_container
+                    .spawn((
+                        Button,
+                        Node {
+                            width: Val::Px(120.0),
+                            height: Val::Px(42.0),
+                            border: UiRect::all(Val::Px(1.5)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border_radius: BorderRadius::all(Val::Px(10.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.5, 0.3, 0.6))),
+                        BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.22, 0.15, 0.9))),
+                        NextStepButton,
+                    ))
+                    .with_children(|btn: &mut ChildSpawnerCommands| {
+                        btn.spawn((
+                            Text::new("NEXT STEP"),
+                            TextFont {
+                                font_size: 13.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::Srgba(Srgba::WHITE)),
+                        ));
+                    });
+
+                // RUN ALL Button
+                btn_container
+                    .spawn((
+                        Button,
+                        Node {
+                            width: Val::Px(120.0),
+                            height: Val::Px(42.0),
+                            border: UiRect::all(Val::Px(1.5)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border_radius: BorderRadius::all(Val::Px(10.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::Srgba(Srgba::new(0.2, 0.4, 0.5, 0.6))),
+                        BackgroundColor(Color::Srgba(Srgba::new(0.1, 0.18, 0.25, 0.9))),
+                        RunAllButton,
+                    ))
+                    .with_children(|btn: &mut ChildSpawnerCommands| {
+                        btn.spawn((
+                            Text::new("RUN ALL"),
+                            TextFont {
+                                font_size: 13.0,
+                                font: font.clone(),
+                                ..default()
+                            },
+                            TextColor(Color::Srgba(Srgba::WHITE)),
+                        ));
+                    });
             });
         });
 }
