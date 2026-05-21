@@ -29,36 +29,28 @@ A premium, highly interactive 3D Rubik's Cube game and solver built from the gro
 
 ---
 
-## 🚀 Installation & Python Library Setup
+## 🚀 Installation & Environment Setup
 
-To run the game and use the automated solver and hand tracking features, you must configure a Python virtual environment containing the necessary solver and vision libraries.
+To run the game and utilize the automated solver and hand tracking features, you simply need to execute our unified environment setup script. This script automatically builds the virtual environments, downloads the necessary big cube solver repository, and installs all python dependencies.
 
-### 1. Configure Python Virtual Environment (Root Directory)
+### 1. Run the Setup Script
 
-Create and activate a virtual environment `.venv` at the root of the project. The Rust application automatically looks for Python in this directory (`.venv/bin/python3`) for a zero-configuration launch.
-
-```bash
-# From the project root directory
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 2. Install Required Python Libraries
-
-Install the vision packages (for Hand Tracking) and compile dwalton76's `kociemba` solver library:
+From the project root directory, grant execution permissions and run the setup script:
 
 ```bash
-# 1. Install standard dependencies
-pip install opencv-python mediapipe protobuf
-
-# 2. Compile and install Kociemba C-bindings from GitHub
-pip install git+https://github.com/dwalton76/kociemba.git
+chmod +x setup.sh
+./setup.sh
 ```
+
+This single script will configure:
+- **Root Virtual Environment (`.venv/`)**: Compiles and installs `kociemba` and sets up the root Python engine for solver integration.
+- **Big Cube Solver Repository (`python_solver/`)**: Clones dwalton76's `rubiks-cube-NxNxN-solver` repo into the project.
+- **Hand Tracker Virtual Environment (`hand_tracker/.venv/`)**: Installs MediaPipe and OpenCV for the webcam gesture recognition engine.
 
 > [!NOTE]  
 > If you run the solver for size $N \ge 4$ for the first time, it will automatically download the required optimal lookup tables (approx. 200-300MB) from S3 and cache them locally in `python_solver/rubiks-cube-NxNxN-solver/lookup-tables/`. Subsequent runs will solve the cube instantly without any internet connection.
 
-### 3. Run the Game
+### 2. Run the Game
 
 Compile and run the Rust game in release mode to ensure smooth 60+ FPS animations and real-time hand-gesture polling:
 
