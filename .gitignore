@@ -27,5 +27,5 @@ Thumbs.db
 *.swp
 *~
 
-# --- Large Lookup Tables ---
-python_solver/rubiks-cube-NxNxN-solver/lookup-tables/
+# --- Python Solvers and Big-Cube Libraries ---
+python_solver/
