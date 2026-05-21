@@ -34,7 +34,7 @@ echo "   [SUCCESS] Root Python environment configured successfully."
 echo ""
 
 # -----------------------------------------------------------------------------
-# 2. SETUP BIG CUBE PYTHON SOLVER (rubiks-cube-NxNxN-solver)
+# 2. SETUP BIG CUBE PYTHON SOLVER (python_solver/)
 # -----------------------------------------------------------------------------
 echo "2. Setting up Big Cube Solver (python_solver/)..."
 mkdir -p python_solver
@@ -45,6 +45,17 @@ if [ ! -d "python_solver/rubiks-cube-NxNxN-solver" ]; then
     echo "   [SUCCESS] Big cube solver repository cloned."
 else
     echo "   [INFO] Big cube solver repository already exists."
+fi
+
+echo "   Compiling C-based solver executable (ida_search_via_graph)..."
+if [ -f "python_solver/rubiks-cube-NxNxN-solver/rubikscubennnsolver/ida_search_via_graph.c" ]; then
+    cd python_solver/rubiks-cube-NxNxN-solver
+    gcc -O3 -o ida_search_via_graph rubikscubennnsolver/ida_search_core.c rubikscubennnsolver/rotate_xxx.c rubikscubennnsolver/ida_search_666.c rubikscubennnsolver/ida_search_777.c rubikscubennnsolver/ida_search_via_graph.c -lm
+    cd "$PROJECT_ROOT"
+    echo "   [SUCCESS] C-based solver compiled successfully."
+else
+    echo "   [ERROR] C-based solver source files not found!"
+    exit 1
 fi
 echo ""
 
