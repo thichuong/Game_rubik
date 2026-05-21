@@ -395,90 +395,190 @@ pub fn logical_string_to_physical_moves_any(
     let v_z_logic = f_normal;
 
     for part in solution.split_whitespace() {
-        let mut chars = part.chars();
-        let Some(first_char) = chars.next() else {
+        let mut chars = part.chars().peekable();
+        let Some(&first_char) = chars.peek() else {
             continue;
         };
 
-        match first_char {
-            'X' | 'Y' | 'Z' => {
-                let logic_axis = match first_char {
-                    'X' => RotationAxis::X,
-                    'Y' => RotationAxis::Y,
-                    _ => RotationAxis::Z,
-                };
+        if first_char == 'X' || first_char == 'Y' || first_char == 'Z' {
+            chars.next(); // Consume the axis char
+            let logic_axis = match first_char {
+                'X' => RotationAxis::X,
+                'Y' => RotationAxis::Y,
+                _ => RotationAxis::Z,
+            };
 
-                let mut index_str = String::new();
-                let mut modifier_char = None;
-                for c in chars {
-                    if c.is_ascii_digit() {
-                        index_str.push(c);
-                    } else {
-                        modifier_char = Some(c);
-                        break;
+            let mut index_str = String::new();
+            let mut modifier_char = None;
+            for c in chars {
+                if c.is_ascii_digit() {
+                    index_str.push(c);
+                } else {
+                    modifier_char = Some(c);
+                    break;
+                }
+            }
+
+            let Ok(logic_index) = index_str.parse::<i32>() else {
+                continue;
+            };
+
+            let logic_direction = if modifier_char == Some('\'') {
+                Direction::CounterClockwise
+            } else {
+                Direction::Clockwise
+            };
+
+            let is_double = modifier_char == Some('2');
+
+            let v_logic = match logic_axis {
+                RotationAxis::X => v_x_logic,
+                RotationAxis::Y => v_y_logic,
+                RotationAxis::Z => v_z_logic,
+            };
+
+            let dot_x = v_logic.dot(Vec3::X);
+            let dot_y = v_logic.dot(Vec3::Y);
+            let dot_z = v_logic.dot(Vec3::Z);
+
+            let (phys_axis, phys_index, phys_direction) = if dot_x.abs() > 0.9 {
+                if dot_x > 0.9 {
+                    (RotationAxis::X, logic_index, logic_direction)
+                } else {
+                    (
+                        RotationAxis::X,
+                        size - 1 - logic_index,
+                        logic_direction.inverse(),
+                    )
+                }
+            } else if dot_y.abs() > 0.9 {
+                if dot_y > 0.9 {
+                    (RotationAxis::Y, logic_index, logic_direction)
+                } else {
+                    (
+                        RotationAxis::Y,
+                        size - 1 - logic_index,
+                        logic_direction.inverse(),
+                    )
+                }
+            } else if dot_z.abs() > 0.9 {
+                if dot_z > 0.9 {
+                    (RotationAxis::Z, logic_index, logic_direction)
+                } else {
+                    (
+                        RotationAxis::Z,
+                        size - 1 - logic_index,
+                        logic_direction.inverse(),
+                    )
+                }
+            } else {
+                continue;
+            };
+
+            let m = RotationMove {
+                axis: phys_axis,
+                index: phys_index,
+                direction: phys_direction,
+                add_to_history: true,
+            };
+            all_moves.push(m);
+            if is_double {
+                all_moves.push(m);
+            }
+        } else {
+            // Parse leading layers count if any (e.g. 2U -> 2)
+            let mut layers_str = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_digit() {
+                    layers_str.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            let layers = if layers_str.is_empty() {
+                1
+            } else {
+                layers_str.parse::<i32>().unwrap_or(1)
+            };
+
+            // Parse Face char
+            let Some(face_char) = chars.next() else {
+                continue;
+            };
+
+            let logic_face = match face_char {
+                'U' => Face::Up,
+                'D' => Face::Down,
+                'L' => Face::Left,
+                'R' => Face::Right,
+                'F' => Face::Front,
+                'B' => Face::Back,
+                _ => continue,
+            };
+
+            // Parse wide flag 'w' if present
+            let mut is_wide = false;
+            if chars.peek() == Some(&'w') {
+                is_wide = true;
+                chars.next();
+            }
+
+            // Parse modifier (e.g. ', 2)
+            let mut is_inverse = false;
+            let mut is_double = false;
+            if let Some(&modifier) = chars.peek() {
+                if modifier == '\'' {
+                    is_inverse = true;
+                    chars.next();
+                } else if modifier == '2' {
+                    is_double = true;
+                    chars.next();
+                }
+            }
+
+            let base_phys_move = mapping.logic_move_to_physical_move(logic_face, is_inverse, size);
+            let axis = base_phys_move.axis;
+            let direction = base_phys_move.direction;
+
+            let get_index_for_layer = |k: i32| -> i32 {
+                if base_phys_move.index == size - 1 {
+                    size - k
+                } else {
+                    k - 1
+                }
+            };
+
+            if is_wide {
+                let actual_layers = if layers == 1 { 2 } else { layers };
+                for k in 1..=actual_layers {
+                    let m = RotationMove {
+                        axis,
+                        index: get_index_for_layer(k),
+                        direction,
+                        add_to_history: true,
+                    };
+                    all_moves.push(m);
+                    if is_double {
+                        all_moves.push(m);
                     }
                 }
-
-                let Ok(logic_index) = index_str.parse::<i32>() else {
-                    continue;
-                };
-
-                let logic_direction = if modifier_char == Some('\'') {
-                    Direction::CounterClockwise
-                } else {
-                    Direction::Clockwise
-                };
-
-                let is_double = modifier_char == Some('2');
-
-                let v_logic = match logic_axis {
-                    RotationAxis::X => v_x_logic,
-                    RotationAxis::Y => v_y_logic,
-                    RotationAxis::Z => v_z_logic,
-                };
-
-                let dot_x = v_logic.dot(Vec3::X);
-                let dot_y = v_logic.dot(Vec3::Y);
-                let dot_z = v_logic.dot(Vec3::Z);
-
-                let (phys_axis, phys_index, phys_direction) = if dot_x.abs() > 0.9 {
-                    if dot_x > 0.9 {
-                        (RotationAxis::X, logic_index, logic_direction)
-                    } else {
-                        (
-                            RotationAxis::X,
-                            size - 1 - logic_index,
-                            logic_direction.inverse(),
-                        )
-                    }
-                } else if dot_y.abs() > 0.9 {
-                    if dot_y > 0.9 {
-                        (RotationAxis::Y, logic_index, logic_direction)
-                    } else {
-                        (
-                            RotationAxis::Y,
-                            size - 1 - logic_index,
-                            logic_direction.inverse(),
-                        )
-                    }
-                } else if dot_z.abs() > 0.9 {
-                    if dot_z > 0.9 {
-                        (RotationAxis::Z, logic_index, logic_direction)
-                    } else {
-                        (
-                            RotationAxis::Z,
-                            size - 1 - logic_index,
-                            logic_direction.inverse(),
-                        )
-                    }
-                } else {
-                    continue;
-                };
-
+            } else if layers_str.is_empty() {
                 let m = RotationMove {
-                    axis: phys_axis,
-                    index: phys_index,
-                    direction: phys_direction,
+                    axis,
+                    index: get_index_for_layer(1),
+                    direction,
+                    add_to_history: true,
+                };
+                all_moves.push(m);
+                if is_double {
+                    all_moves.push(m);
+                }
+            } else {
+                let m = RotationMove {
+                    axis,
+                    index: get_index_for_layer(layers),
+                    direction,
                     add_to_history: true,
                 };
                 all_moves.push(m);
@@ -486,28 +586,6 @@ pub fn logical_string_to_physical_moves_any(
                     all_moves.push(m);
                 }
             }
-            'U' | 'D' | 'L' | 'R' | 'F' | 'B' => {
-                let logic_face = match first_char {
-                    'U' => Face::Up,
-                    'D' => Face::Down,
-                    'L' => Face::Left,
-                    'R' => Face::Right,
-                    'F' => Face::Front,
-                    _ => Face::Back,
-                };
-
-                let modifier = chars.next();
-                let is_inverse = modifier == Some('\'');
-                let phys_move = mapping.logic_move_to_physical_move(logic_face, is_inverse, size);
-
-                let is_double = modifier == Some('2');
-
-                all_moves.push(phys_move);
-                if is_double {
-                    all_moves.push(phys_move);
-                }
-            }
-            _ => {}
         }
     }
     all_moves

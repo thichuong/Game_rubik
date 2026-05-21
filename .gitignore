@@ -26,3 +26,6 @@ Thumbs.db
 *.sln
 *.swp
 *~
+
+# --- Large Lookup Tables ---
+python_solver/rubiks-cube-NxNxN-solver/lookup-tables/

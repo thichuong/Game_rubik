@@ -14,13 +14,61 @@ pub fn solve_cube_for_size(
     table: &DataTable,
 ) -> Option<Vec<String>> {
     if size >= 4 {
-        let moves =
-            crate::nxn::solver::solve_nxn(size as usize, faces, cube_transform, mapping, table)?;
-        let str_moves = moves
-            .into_iter()
-            .map(|m| helpers::physical_move_to_logical_string_any(m, size, mapping))
-            .collect();
-        Some(str_moves)
+        // 1. Scrape the current logical cube state using Bevy entities
+        let state =
+            crate::nxn::state::NxNState::from_bevy(size as usize, faces, cube_transform, mapping)?;
+        let state_str = state.to_string_rep();
+
+        // 2. Invoke the python solver using subprocess with absolute paths
+        let python_path = std::fs::canonicalize(".venv/bin/python")
+            .unwrap_or_else(|_| std::path::PathBuf::from(".venv/bin/python"));
+        let script_path =
+            std::fs::canonicalize("python_solver/rubiks-cube-NxNxN-solver/rubiks-cube-solver.py")
+                .unwrap_or_else(|_| std::path::PathBuf::from("rubiks-cube-solver.py"));
+
+        // Obtain and inject the absolute path of .venv/bin to PATH env to let kociemba CLI execute correctly
+        let mut path_env = std::env::var("PATH").unwrap_or_default();
+        let venv_bin_absolute = std::fs::canonicalize(".venv/bin").ok().map_or_else(
+            || ".venv/bin".to_string(),
+            |p| p.to_string_lossy().into_owned(),
+        );
+        path_env = format!("{venv_bin_absolute}:{path_env}");
+
+        let output = std::process::Command::new(python_path)
+            .arg(script_path)
+            .arg("--state")
+            .arg(&state_str)
+            .current_dir("python_solver/rubiks-cube-NxNxN-solver")
+            .env("PATH", path_env)
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            let out_msg = String::from_utf8_lossy(&output.stdout);
+            eprintln!("Python solver failed with status: {:?}", output.status);
+            eprintln!("Stdout: {out_msg}");
+            eprintln!("Stderr: {err_msg}");
+            return None;
+        }
+
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+
+        // 3. Find the Solution: line and split logical moves
+        for line in stdout_str.lines() {
+            if line.starts_with("Solution: ") {
+                let sol_part = line.trim_start_matches("Solution: ").trim();
+                if sol_part.is_empty() {
+                    return Some(Vec::new());
+                }
+                let moves = sol_part
+                    .split_whitespace()
+                    .map(String::from)
+                    .collect::<Vec<String>>();
+                return Some(moves);
+            }
+        }
+        None
     } else {
         let state_str = helpers::get_cube_state_for_size(size, faces, cube_transform, mapping)?;
         solve_cube(&state_str, table)
