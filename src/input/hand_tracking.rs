@@ -4,6 +4,8 @@ use crate::rubik::resources::{RotationQueue, RubikSize};
 use crate::rubik::systems::creation::GAP;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use rubik_solver::StepByStepSolution;
+
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -116,6 +118,7 @@ fn receive_hand_tracking(
     cubie_faces: Query<(Entity, &CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     rubik_size: Res<RubikSize>,
+    solution: Res<StepByStepSolution>,
 ) {
     let Some(receiver) = receiver else {
         return;
@@ -147,7 +150,7 @@ fn receive_hand_tracking(
 
     let hands = &data.hands;
 
-    if enabled.0 {
+    if enabled.0 && !solution.active && !solution.is_searching {
         let mut left_active = false;
         let mut right_active = false;
 

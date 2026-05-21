@@ -4,6 +4,7 @@ use crate::rubik::resources::{MoveHistory, RotationQueue, RubikSize};
 use crate::rubik::systems::creation::GAP;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use rubik_solver::StepByStepSolution;
 
 #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
 pub fn handle_mouse_input(
@@ -16,7 +17,14 @@ pub fn handle_mouse_input(
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     rubik_size: Res<RubikSize>,
     ui_interactions: Query<&Interaction>,
+    solution: Res<StepByStepSolution>,
 ) {
+    // Block mouse interactions if the solver is actively showing or searching
+    if solution.active || solution.is_searching {
+        drag_state.start_face = None;
+        return;
+    }
+
     // Block 3D mouse interaction if the cursor is over any active UI element
     if ui_interactions
         .iter()
@@ -158,7 +166,13 @@ pub fn handle_keyboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut rotation_queue: ResMut<RotationQueue>,
     mut history: ResMut<MoveHistory>,
+    solution: Res<StepByStepSolution>,
 ) {
+    // Block keyboard undo/redo rotations when solver is active or searching
+    if solution.active || solution.is_searching {
+        return;
+    }
+
     if keyboard.pressed(KeyCode::ControlLeft) && keyboard.just_pressed(KeyCode::KeyZ) {
         if let Some(last_move) = history.done.pop() {
             let inverse_move = last_move.inverse();
