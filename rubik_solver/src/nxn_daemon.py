@@ -68,6 +68,18 @@ def solve_cube(state: str, order: str = "URFDLB") -> str:
 def main():
     # Record parent PID to detect if Rust parent exits
     parent_pid = os.getppid()
+
+    # Set parent death signal on Linux to ensure immediate termination if parent dies
+    if sys.platform.startswith("linux"):
+        try:
+            import ctypes
+            import signal
+            libc = ctypes.CDLL(None)
+            # PR_SET_PDEATHSIG = 1; send SIGTERM to itself when parent dies
+            libc.prctl(1, signal.SIGTERM)
+            logger.info("Successfully set parent death signal (PR_SET_PDEATHSIG) to SIGTERM.")
+        except Exception as e:
+            logger.warning(f"Could not set parent death signal: {e}")
     
     port = 10023
     if len(sys.argv) > 1:
@@ -96,11 +108,14 @@ def main():
             try:
                 client_socket, addr = server_socket.accept()
             except socket.timeout:
-                # Periodic parent check: if the parent process has died, os.kill(parent_pid, 0) raises OSError
+                # Periodic parent check: if parent PID has changed (reparented) or no longer exists
+                if os.getppid() != parent_pid:
+                    logger.info("Parent process died or changed. Exiting.")
+                    break
                 try:
                     os.kill(parent_pid, 0)
                 except OSError:
-                    logger.info("Parent process died. Exiting.")
+                    logger.info("Parent process died (failed kill check). Exiting.")
                     break
                 continue
 

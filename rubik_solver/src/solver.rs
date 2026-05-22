@@ -2,10 +2,13 @@ use kewb::{CubieCube, DataTable, FaceCube, Solver};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const DAEMON_PORT: u16 = 10023;
 const DAEMON_SCRIPT: &str = include_str!("nxn_daemon.py");
+
+static DAEMON_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
 /// Helper function to ensure the Python solver daemon is active and listening on the designated port.
 /// If not active, it will automatically spawn the daemon and await its readiness.
@@ -49,6 +52,7 @@ fn ensure_daemon_running(port: u16) -> bool {
     };
 
     // Await the readiness token from daemon stdout with a 30s timeout
+    let mut ready = false;
     if let Some(stdout) = child.stdout.take() {
         let reader = BufReader::new(stdout);
         let start = Instant::now();
@@ -61,20 +65,39 @@ fn ensure_daemon_running(port: u16) -> bool {
             }
             if let Ok(line_str) = line {
                 if line_str.contains(&format!("READY:{port}")) {
-                    return true;
+                    ready = true;
+                    break;
                 }
             }
         }
     }
 
-    // Verify connection to be fully certain
-    TcpStream::connect(format!("127.0.0.1:{port}")).is_ok()
+    if ready {
+        // Store the child process handle to ensure it can be killed on shutdown
+        if let Ok(mut guard) = DAEMON_CHILD.lock() {
+            *guard = Some(child);
+        }
+        true
+    } else {
+        // Clean up the spawned process immediately if it failed to initialize properly
+        let _ = child.kill();
+        false
+    }
 }
 
 /// Shuts down the active solver daemon by sending a SHUTDOWN signal.
 pub fn shutdown_daemon(port: u16) {
+    // 1. Send SHUTDOWN command over TCP for graceful termination
     if let Ok(mut stream) = TcpStream::connect(format!("127.0.0.1:{port}")) {
         let _ = stream.write_all(b"SHUTDOWN\n");
+    }
+
+    // 2. Kill the spawned child process to guarantee termination and avoid orphans
+    if let Ok(mut guard) = DAEMON_CHILD.lock() {
+        if let Some(mut child) = guard.take() {
+            let _ = child.kill();
+            let _ = child.wait(); // Prevent zombie processes by waiting for its termination status
+        }
     }
 }
 
