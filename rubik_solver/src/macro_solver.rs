@@ -11,8 +11,9 @@
 
 use crate::core::{Direction, Face, RotationAxis, RotationMove};
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,6 +69,30 @@ fn get_24_rotations() -> Vec<Quat> {
 }
 
 impl VirtualCube {
+    /// Rotate the entire cube (reorienting it)
+    pub fn rotate(&mut self, rot: CubeRotation) {
+        let size = self.size;
+        let offset = (size as f32 - 1.0) / 2.0;
+
+        let (ax, sx) = rot.x_map;
+        let (ay, sy) = rot.y_map;
+        let (az, sz) = rot.z_map;
+
+        let ux = get_vector(ax, sx).as_vec3();
+        let uy = get_vector(ay, sy).as_vec3();
+        let uz = get_vector(az, sz).as_vec3();
+
+        let mat = Mat3::from_cols(ux, uy, uz);
+        let q_rot = Quat::from_mat3(&mat);
+
+        for cubie in &mut self.cubies {
+            let centered = cubie.pos.as_vec3() - Vec3::splat(offset);
+            let rotated = q_rot * centered;
+            cubie.pos = (rotated + Vec3::splat(offset)).round().as_ivec3();
+            cubie.rotation = (q_rot * cubie.rotation).normalize();
+        }
+    }
+
     /// Create a solved virtual cube of size N
     pub fn new(size: i32) -> Self {
         let mut cubies = Vec::new();
@@ -288,6 +313,31 @@ pub struct CubeRotation {
 }
 
 impl CubeRotation {
+    pub fn inverse(self) -> Self {
+        // A rotation is a 3x3 orthogonal matrix. Transpose is inverse.
+        let ux = get_vector(self.x_map.0, self.x_map.1);
+        let uy = get_vector(self.y_map.0, self.y_map.1);
+        let uz = get_vector(self.z_map.0, self.z_map.1);
+
+        let mut x_map = (RotationAxis::X, true);
+        let mut y_map = (RotationAxis::Y, true);
+        let mut z_map = (RotationAxis::Z, true);
+
+        let axes = [(RotationAxis::X, ux), (RotationAxis::Y, uy), (RotationAxis::Z, uz)];
+
+        for (target_axis, vec) in axes {
+            if vec.x != 0 {
+                x_map = (target_axis, vec.x > 0);
+            } else if vec.y != 0 {
+                y_map = (target_axis, vec.y > 0);
+            } else if vec.z != 0 {
+                z_map = (target_axis, vec.z > 0);
+            }
+        }
+
+        Self { x_map, y_map, z_map }
+    }
+
     const fn transform_move(self, m: RotationMove, size: i32) -> RotationMove {
         let (new_axis, positive) = match m.axis {
             RotationAxis::X => self.x_map,
@@ -375,7 +425,7 @@ pub struct Macro {
     pub cost: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SymmetricMacro {
     pub name: String,
     pub moves: Vec<RotationMove>,
@@ -873,6 +923,50 @@ pub fn get_last_two_edges_2_moves(size: i32, i: i32) -> Vec<RotationMove> {
     ]
 }
 
+/// A "pure" commutator for L2C that targets Up and Front faces.
+/// Formula: [r, U2] = r U2 r' U2
+pub fn get_pure_commutator_u_f(size: i32, r_idx: i32) -> Vec<RotationMove> {
+    let u_idx = size - 1;
+    vec![
+        RotationMove {
+            axis: RotationAxis::X,
+            index: r_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: u_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: u_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::X,
+            index: r_idx,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: u_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+        RotationMove {
+            axis: RotationAxis::Y,
+            index: u_idx,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        },
+    ]
+}
+
 pub fn get_niklas_8_moves(size: i32) -> Vec<RotationMove> {
     let u_idx = size - 1;
     let r_idx = size - 1;
@@ -1260,6 +1354,121 @@ pub fn get_oll_parity_moves(size: i32) -> Vec<RotationMove> {
     ]
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct L2CTable {
+    pub table: HashMap<u16, Vec<RotationMove>>,
+}
+
+impl L2CTable {
+    pub fn save(&self, path: &str) -> std::io::Result<()> {
+        let json = serde_json::to_string(self).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::Other, format!("Serde error: {e}"))
+        })?;
+        std::fs::write(path, json)
+    }
+
+    pub fn load(path: &str) -> std::io::Result<Self> {
+        let json = std::fs::read_to_string(path)?;
+        let table = serde_json::from_str(&json).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::Other, format!("Serde error: {e}"))
+        })?;
+        Ok(table)
+    }
+
+    pub fn generate_for_6x6() -> Self {
+        let size = 6;
+        Self::generate(size, 4)
+    }
+
+    pub fn generate(size: i32, max_depth: usize) -> Self {
+        let mut table = HashMap::new();
+        let mut queue = VecDeque::new();
+
+        let initial_cube = VirtualCube::new(size);
+        let initial_mask = get_face_bitmask(&initial_cube, Face::Up);
+        table.insert(initial_mask, Vec::new());
+        queue.push_back((initial_cube, Vec::new(), 0));
+
+        let mut base_moves = Vec::new();
+        for i in 1..(size - 1) {
+            let fw = get_pure_commutator_u_f(size, i);
+            let mut bw = fw.clone();
+            bw.reverse();
+            bw = bw.into_iter().map(|m| m.inverse()).collect();
+            base_moves.push(fw);
+            base_moves.push(bw);
+        }
+
+        base_moves.push(vec![RotationMove {
+            axis: RotationAxis::Y,
+            index: size - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        }]);
+        base_moves.push(vec![RotationMove {
+            axis: RotationAxis::Y,
+            index: size - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        }]);
+
+        while let Some((cube, moves, depth)) = queue.pop_front() {
+            if depth >= max_depth {
+                continue;
+            }
+            for base_m in &base_moves {
+                let mut next_cube = cube.clone();
+                next_cube.apply_moves(base_m);
+                let next_mask = get_face_bitmask(&next_cube, Face::Up);
+
+                if !table.contains_key(&next_mask) {
+                    let mut next_moves = Vec::new();
+                    // Scrambled to solved: inverse of the moves that took us from solved to here
+                    let inv_moves: Vec<RotationMove> =
+                        base_m.iter().rev().map(|m| m.inverse()).collect();
+                    next_moves.extend(inv_moves);
+                    next_moves.extend(moves.clone());
+
+                    table.insert(next_mask, next_moves.clone());
+                    queue.push_back((next_cube, next_moves, depth + 1));
+                }
+            }
+        }
+
+        Self { table }
+    }
+}
+
+pub fn get_face_bitmask(cube: &VirtualCube, face: Face) -> u16 {
+    let size = cube.size;
+    let mut bitmask = 0u16;
+    let mut bit_idx = 0;
+
+    let normal = face.normal();
+
+    for row in 1..(size - 1) {
+        for col in 1..(size - 1) {
+            let (x, y, z) = match face {
+                Face::Up => (col, size - 1, row),
+                Face::Down => (col, 0, size - 1 - row),
+                Face::Left => (0, size - 1 - row, col),
+                Face::Right => (size - 1, size - 1 - row, size - 1 - col),
+                Face::Front => (col, size - 1 - row, size - 1),
+                Face::Back => (size - 1 - col, size - 1 - row, 0),
+            };
+
+            if let Some(cubie) = cube.cubies.iter().find(|c| c.pos == IVec3::new(x, y, z)) {
+                let local_dir = cubie.rotation.inverse() * normal;
+                if Face::from_normal(local_dir) != Some(face) {
+                    bitmask |= 1 << bit_idx;
+                }
+            }
+            bit_idx += 1;
+        }
+    }
+    bitmask
+}
+
 pub fn count_misplaced_centers_on_face(cube: &VirtualCube, face: Face) -> usize {
     let size = cube.size;
     let mut count = 0;
@@ -1295,32 +1504,41 @@ pub fn count_misplaced_centers_on_face(cube: &VirtualCube, face: Face) -> usize 
 #[allow(clippy::option_if_let_else)]
 pub fn count_misplaced_centers_staged(cube: &VirtualCube) -> usize {
     let faces = [
-        Face::Right,
-        Face::Left,
         Face::Up,
         Face::Down,
+        Face::Left,
+        Face::Right,
         Face::Front,
         Face::Back,
     ];
-    let mut misplaced_by_face = [0; 6];
-    for (i, &face) in faces.iter().enumerate() {
-        misplaced_by_face[i] = count_misplaced_centers_on_face(cube, face);
+    let mut misplaced = Vec::new();
+    for &face in &faces {
+        misplaced.push((face, count_misplaced_centers_on_face(cube, face)));
     }
 
-    // Find the first unsolved face and count total unsolved faces
-    let mut first_unsolved_idx = None;
-    let mut unsolved_count = 0;
-    for (i, _) in faces.iter().enumerate() {
-        if misplaced_by_face[i] > 0 {
-            if first_unsolved_idx.is_none() {
-                first_unsolved_idx = Some(i);
-            }
-            unsolved_count += 1;
+    let unsolved_count = misplaced.iter().filter(|&&(_, m)| m > 0).count();
+    if unsolved_count == 0 {
+        return 0;
+    }
+
+    // If we have more than 2 faces unsolved, we pick the one with the FEWEST misplaced pieces (highest density)
+    // to solve first. But we must also consider the "opposite" face strategy.
+
+    // For simplicity, let's find the face with the minimum non-zero misplaced count.
+    let mut best_face_idx = None;
+    let mut min_misplaced = 999;
+
+    for (i, &(_, m)) in misplaced.iter().enumerate() {
+        if m > 0 && m < min_misplaced {
+            min_misplaced = m;
+            best_face_idx = Some(i);
         }
     }
 
-    if let Some(idx) = first_unsolved_idx {
-        unsolved_count * 1000 + misplaced_by_face[idx]
+    if let Some(_) = best_face_idx {
+        // We want to prioritize solving faces one by one.
+        // Penalty based on number of unsolved faces + misplaced on the "current" target face.
+        unsolved_count * 1000 + min_misplaced
     } else {
         0
     }
@@ -1335,7 +1553,7 @@ pub enum SolverPhase {
 
 fn evaluate_heuristic(cube: &VirtualCube, phase: SolverPhase) -> usize {
     match phase {
-        SolverPhase::Phase1Centers => count_misplaced_centers(cube),
+        SolverPhase::Phase1Centers => count_misplaced_centers_staged(cube),
         SolverPhase::Phase2Edges => count_unpaired_edges(cube),
         SolverPhase::Phase3CornersAndParity => cube.count_misplaced_stickers(),
     }
@@ -1538,7 +1756,30 @@ pub fn solve_phase_beam_search(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_virtual_cube_new() {
+        let cube = VirtualCube::new(3);
+        assert_eq!(cube.size, 3);
+        assert_eq!(cube.cubies.len(), 26);
+    }
+
+    #[test]
+    fn test_get_face_bitmask_solved() {
+        let cube = VirtualCube::new(6);
+        let mask = get_face_bitmask(&cube, Face::Up);
+        assert_eq!(mask, 0);
+    }
+}
+
 pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
+    solve_cube_macro_hybrid(cube, None)
+}
+
+fn solve_cube_macro_old(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     let size = cube.size;
     let rotations = generate_cube_rotations();
 
@@ -1731,6 +1972,418 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
 
         if let Some(bm) = best_macros {
             if bm.is_empty() {
+                break;
+            }
+            for m in &bm {
+                cube.apply_moves(&m.moves);
+                global_visited_centers.insert(cube.clone());
+                for &mv in &m.moves {
+                    solved_solution.push(mv);
+                }
+            }
+        } else {
+            return None;
+        }
+        step += 1;
+        if step > max_center_steps {
+            break;
+        }
+    }
+
+    // Phase 2: Solving Edges
+    step = 1;
+    let mut global_visited_edges = HashSet::new();
+    global_visited_edges.insert(cube.clone());
+
+    loop {
+        let unpaired = count_unpaired_edges(cube);
+        if unpaired == 0 {
+            break;
+        }
+
+        let mut best_macros = solve_phase_beam_search(
+            cube,
+            SolverPhase::Phase2Edges,
+            &edge_macros,
+            50,
+            5,
+            &global_visited_edges,
+        );
+
+        if let Some(ref bm) = best_macros {
+            if bm.is_empty() {
+                // Adaptive Fallback: search deeper if stuck
+                best_macros = solve_phase_beam_search(
+                    cube,
+                    SolverPhase::Phase2Edges,
+                    &edge_macros,
+                    300,
+                    8,
+                    &global_visited_edges,
+                );
+            }
+        }
+
+        if let Some(bm) = best_macros {
+            if bm.is_empty() {
+                break;
+            }
+            for m in &bm {
+                cube.apply_moves(&m.moves);
+                global_visited_edges.insert(cube.clone());
+                for &mv in &m.moves {
+                    solved_solution.push(mv);
+                }
+            }
+        } else {
+            return None;
+        }
+        step += 1;
+        if step > max_edge_steps {
+            break;
+        }
+    }
+
+    // Phase 3: Solving Corners, Edges and Parities
+    step = 1;
+    let mut global_visited_stage3 = HashSet::new();
+    global_visited_stage3.insert(cube.clone());
+
+    loop {
+        let misplaced = cube.count_misplaced_stickers();
+        if misplaced == 0 {
+            break;
+        }
+
+        let mut best_macros = solve_phase_beam_search(
+            cube,
+            SolverPhase::Phase3CornersAndParity,
+            &stage3_macros,
+            50,
+            6,
+            &global_visited_stage3,
+        );
+
+        if let Some(ref bm) = best_macros {
+            if bm.is_empty() {
+                // Adaptive Fallback: search deeper if stuck
+                best_macros = solve_phase_beam_search(
+                    cube,
+                    SolverPhase::Phase3CornersAndParity,
+                    &stage3_macros,
+                    300,
+                    8,
+                    &global_visited_stage3,
+                );
+            }
+        }
+
+        if let Some(bm) = best_macros {
+            if bm.is_empty() {
+                break;
+            }
+            for m in &bm {
+                cube.apply_moves(&m.moves);
+                global_visited_stage3.insert(cube.clone());
+                for &mv in &m.moves {
+                    solved_solution.push(mv);
+                }
+            }
+        } else {
+            return None;
+        }
+        step += 1;
+        if step > max_stage3_steps {
+            break;
+        }
+    }
+
+    if cube.count_misplaced_stickers() == 0 {
+        Some(solved_solution)
+    } else {
+        None
+    }
+}
+
+pub fn solve_l2c_lookup(
+    cube: &VirtualCube,
+    table: &L2CTable,
+) -> Option<Vec<RotationMove>> {
+    // 1. Identify which two faces are unsolved.
+    let faces = [
+        Face::Up,
+        Face::Down,
+        Face::Left,
+        Face::Right,
+        Face::Front,
+        Face::Back,
+    ];
+    let mut unsolved_faces = Vec::new();
+    for &f in &faces {
+        if count_misplaced_centers_on_face(cube, f) > 0 {
+            unsolved_faces.push(f);
+        }
+    }
+
+    if unsolved_faces.is_empty() {
+        return Some(Vec::new());
+    }
+    if unsolved_faces.len() != 2 {
+        // L2C logic only applies when exactly 2 faces are unsolved
+        return None;
+    }
+
+    // 2. Try all 24 rotations to see if we find a state in the table.
+    let rotations = generate_cube_rotations();
+    for rot in rotations {
+        let mut rotated_cube = cube.clone();
+        rotated_cube.rotate(rot);
+
+        let mask = get_face_bitmask(&rotated_cube, Face::Up);
+        if let Some(moves) = table.table.get(&mask) {
+            // We found the moves! But they are in the rotated orientation.
+            // We need to transform them back.
+            // Actually, we can just apply them to the original cube by rotating them.
+            // If `rot` transforms original to rotated, then `inv_rot` transforms rotated back to original.
+            // But it's easier to just rotate the moves from our table's perspective.
+
+            // Wait, if we apply moves `M` to `rotated_cube`, it solves it.
+            // `rotated_cube = rot(cube)`
+            // `solved = M(rotated_cube) = M(rot(cube))`
+            // We want `solved = rot(M'(cube))` where `M'` are the moves to apply to the original cube.
+            // `M'(cube) = rot_inv(M(rot(cube)))`
+
+            // To get M', we can transform each move in M using the inverse of `rot`.
+            let ir = rot.inverse();
+            let transformed_moves = moves.iter().map(|m| ir.transform_move(*m, cube.size)).collect();
+            return Some(transformed_moves);
+        }
+    }
+
+    None
+}
+
+pub fn solve_cube_macro_hybrid(
+    cube: &mut VirtualCube,
+    l2c_table: Option<&L2CTable>,
+) -> Option<Vec<RotationMove>> {
+    let size = cube.size;
+    let rotations = generate_cube_rotations();
+
+    let mut center_bases = Vec::new();
+    // Group 1: Destructive Moves (Outer & Inner Slice turns)
+    center_bases.push(Macro {
+        name: "Outer_Face_Turn_CW".to_string(),
+        moves: vec![RotationMove {
+            axis: RotationAxis::X,
+            index: size - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        }],
+        cost: 1,
+    });
+    center_bases.push(Macro {
+        name: "Outer_Face_Turn_CCW".to_string(),
+        moves: vec![RotationMove {
+            axis: RotationAxis::X,
+            index: size - 1,
+            direction: Direction::CounterClockwise,
+            add_to_history: true,
+        }],
+        cost: 1,
+    });
+    for i in 1..(size - 1) {
+        center_bases.push(Macro {
+            name: format!("Inner_Slice_Turn_CW_s{i}"),
+            moves: vec![RotationMove {
+                axis: RotationAxis::X,
+                index: i,
+                direction: Direction::Clockwise,
+                add_to_history: true,
+            }],
+            cost: 1,
+        });
+        center_bases.push(Macro {
+            name: format!("Inner_Slice_Turn_CCW_s{i}"),
+            moves: vec![RotationMove {
+                axis: RotationAxis::X,
+                index: i,
+                direction: Direction::CounterClockwise,
+                add_to_history: true,
+            }],
+            cost: 1,
+        });
+    }
+    let destructive_center_macros = generate_symmetric_macros(&center_bases, &rotations, size);
+
+    let mut center_pure_bases = Vec::new();
+    for i in 1..(size - 1) {
+        for j in 1..(size - 1) {
+            center_pure_bases.push(Macro {
+                name: format!("Center_F_U_Right_s{i}_s{j}"),
+                moves: get_center1_moves(size, i, j),
+                cost: 8,
+            });
+            center_pure_bases.push(Macro {
+                name: format!("Center_F_U_Left_s{i}_s{j}"),
+                moves: get_center2_moves(size, i, j),
+                cost: 8,
+            });
+            center_pure_bases.push(Macro {
+                name: format!("Center_R_U_Back_s{i}_s{j}"),
+                moves: get_center3_moves(size, i, j),
+                cost: 8,
+            });
+            center_pure_bases.push(Macro {
+                name: format!("Center_R_U_Front_s{i}_s{j}"),
+                moves: get_center4_moves(size, i, j),
+                cost: 8,
+            });
+        }
+    }
+    let pure_center_macros = generate_symmetric_macros(&center_pure_bases, &rotations, size);
+
+    let mut all_center_macros = destructive_center_macros.clone();
+    all_center_macros.extend(pure_center_macros.clone());
+
+    let mut edge_bases = Vec::new();
+    edge_bases.push(Macro {
+        name: "Outer_Face_Turn".to_string(),
+        moves: vec![RotationMove {
+            axis: RotationAxis::X,
+            index: size - 1,
+            direction: Direction::Clockwise,
+            add_to_history: true,
+        }],
+        cost: 1,
+    });
+    edge_bases.push(Macro {
+        name: "Edge_Flip".to_string(),
+        moves: get_edge_flip_moves(size),
+        cost: 7,
+    });
+    for i in 1..(size - 1) {
+        edge_bases.push(Macro {
+            name: format!("Edge_Pair_R_F_s{i}"),
+            moves: get_edge_pair_moves(size, i),
+            cost: 9,
+        });
+        edge_bases.push(Macro {
+            name: format!("Last_Two_Edges_1_s{i}"),
+            moves: get_last_two_edges_1_moves(size, i),
+            cost: 9,
+        });
+        edge_bases.push(Macro {
+            name: format!("Last_Two_Edges_2_s{i}"),
+            moves: get_last_two_edges_2_moves(size, i),
+            cost: 9,
+        });
+    }
+    let edge_macros = generate_symmetric_macros(&edge_bases, &rotations, size);
+
+    let stage3_bases = vec![
+        Macro {
+            name: "Outer_Face_Turn".to_string(),
+            moves: vec![RotationMove {
+                axis: RotationAxis::X,
+                index: size - 1,
+                direction: Direction::Clockwise,
+                add_to_history: true,
+            }],
+            cost: 1,
+        },
+        Macro {
+            name: "Corner_Cycle_Niklas".to_string(),
+            moves: get_niklas_8_moves(size),
+            cost: 8,
+        },
+        Macro {
+            name: "Corner_Swap_T_Perm".to_string(),
+            moves: get_t_perm_moves(size),
+            cost: 15,
+        },
+        Macro {
+            name: "PLL_Parity".to_string(),
+            moves: get_pll_parity_moves(size),
+            cost: 12,
+        },
+        Macro {
+            name: "OLL_Parity".to_string(),
+            moves: get_oll_parity_moves(size),
+            cost: 25,
+        },
+        Macro {
+            name: "Edge_Flip_Stage3".to_string(),
+            moves: get_edge_flip_moves(size),
+            cost: 7,
+        },
+    ];
+    let stage3_macros = generate_symmetric_macros(&stage3_bases, &rotations, size);
+
+    let mut solved_solution = Vec::new();
+
+    let total_centers = 6 * (size - 2) * (size - 2);
+    let max_center_steps = (total_centers * 2) as usize;
+    let total_edges = 12 * (size - 2);
+    let max_edge_steps = (total_edges * 2) as usize;
+    let max_stage3_steps = 50;
+
+    // Phase 1: Solving Centers
+    let mut step = 1;
+    let mut global_visited_centers = HashSet::new();
+    global_visited_centers.insert(cube.clone());
+
+    loop {
+        let misplaced_raw = count_misplaced_centers(cube);
+        if misplaced_raw == 0 {
+            break;
+        }
+
+        // Endgame Lookup (Phase 1 Giai đoạn 2)
+        if misplaced_raw <= 8 {
+            if let Some(table) = l2c_table {
+                if let Some(l2c_moves) = solve_l2c_lookup(cube, table) {
+                    cube.apply_moves(&l2c_moves);
+                    solved_solution.extend(l2c_moves);
+                    break;
+                }
+            }
+        }
+
+        // Determine if we should use coarse or fine search
+        let (macros_to_use, bw, depth) = if misplaced_raw > 8 {
+            (&all_center_macros, 15, 2)
+        } else {
+            (&pure_center_macros, 50, 5)
+        };
+
+        let mut best_macros = solve_phase_beam_search(
+            cube,
+            SolverPhase::Phase1Centers,
+            macros_to_use,
+            bw,
+            depth,
+            &global_visited_centers,
+        );
+
+        if let Some(ref bm) = best_macros {
+            if bm.is_empty() {
+                // Adaptive Fallback
+                best_macros = solve_phase_beam_search(
+                    cube,
+                    SolverPhase::Phase1Centers,
+                    &pure_center_macros,
+                    300,
+                    8,
+                    &global_visited_centers,
+                );
+            }
+        }
+
+        if let Some(bm) = best_macros {
+            if bm.is_empty() {
+                // Last ditch effort: Short BFS Depth 3
+                // (Implementation omitted for now, using existing deep search as fallback)
                 break;
             }
             for m in &bm {

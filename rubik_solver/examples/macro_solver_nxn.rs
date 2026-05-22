@@ -4,213 +4,79 @@
 use rand::RngExt;
 use rubik_solver::core::{Direction, Face, RotationAxis, RotationMove};
 use rubik_solver::macro_solver::{
-    Macro, SolverPhase, VirtualCube, count_misplaced_centers, generate_cube_rotations,
-    generate_symmetric_macros, get_center1_moves, get_center2_moves, get_center3_moves,
-    get_center4_moves, solve_phase_beam_search,
+    count_misplaced_centers, solve_cube_macro_hybrid, L2CTable, VirtualCube,
 };
-use std::collections::HashSet;
 use std::time::Instant;
 
 fn main() {
     println!("=====================================================");
-    println!("   🧠 NxN CENTERS ONLY DEBUGGER (6x6x6)              ");
+    println!("   🧠 NxN HYBRID SOLVER DEBUGGER (6x6x6)             ");
     println!("=====================================================");
 
     let size = 6;
-    let mut cube = VirtualCube::new(size);
+    let table_path = "l2c_table_6x6.json";
 
-    // Deep scramble: 50 random moves on inner and outer layers
-    let mut rng = rand::rng();
-    let mut scramble_moves = Vec::new();
-    let axes = [RotationAxis::X, RotationAxis::Y, RotationAxis::Z];
+    println!("Loading L2C Lookup Table...");
+    let start_init = Instant::now();
+    let l2c_table = if let Ok(table) = L2CTable::load(table_path) {
+        println!("Loaded table from {}.", table_path);
+        table
+    } else {
+        println!("Table not found. Generating (this may take a while)...");
+        // Use a smaller depth for testing to avoid timeout/long waits in debug environment
+        let table = L2CTable::generate(size, 2);
+        let _ = table.save(table_path);
+        println!("Table generated (depth 2) and saved.");
+        table
+    };
+    println!("Initialization took {:?}", start_init.elapsed());
 
-    println!(
-        "Scrambling a {}x{}x{} cube with 50 deep random moves...",
-        size, size, size
-    );
-    for _ in 0..50 {
-        let axis = axes[rng.random_range(0..3)];
-        let index = rng.random_range(0..size);
-        let direction = if rng.random_bool(0.5) {
-            Direction::Clockwise
-        } else {
-            Direction::CounterClockwise
-        };
-        let m = RotationMove {
-            axis,
-            index,
-            direction,
-            add_to_history: true,
-        };
-        cube.apply_move(m);
-        scramble_moves.push(m);
-    }
+    let mut solve_times = Vec::new();
+    let mut success_count = 0;
+    let num_tests = 10; // Change to 100 for full benchmark
 
-    let total_centers = 6 * (size - 2) * (size - 2);
-    let initial_misplaced = count_misplaced_centers(&cube);
-    println!(
-        "Scramble complete. Initial misplaced centers: {}/{}",
-        initial_misplaced, total_centers
-    );
+    for i in 1..=num_tests {
+        let mut cube = VirtualCube::new(size);
+        let mut rng = rand::rng();
+        let axes = [RotationAxis::X, RotationAxis::Y, RotationAxis::Z];
 
-    println!("\nGenerating center-solving macros...");
-    let rotations = generate_cube_rotations();
-    let mut center_bases = Vec::new();
-    // Clockwise Outer Face Turn
-    center_bases.push(Macro {
-        name: "Outer_Face_Turn_CW".to_string(),
-        moves: vec![RotationMove {
-            axis: RotationAxis::X,
-            index: size - 1,
-            direction: Direction::Clockwise,
-            add_to_history: true,
-        }],
-        cost: 1,
-    });
-    // CounterClockwise Outer Face Turn
-    center_bases.push(Macro {
-        name: "Outer_Face_Turn_CCW".to_string(),
-        moves: vec![RotationMove {
-            axis: RotationAxis::X,
-            index: size - 1,
-            direction: Direction::CounterClockwise,
-            add_to_history: true,
-        }],
-        cost: 1,
-    });
-    for i in 1..(size - 1) {
-        // Clockwise Inner Slice Turn
-        center_bases.push(Macro {
-            name: format!("Inner_Slice_Turn_CW_s{}", i),
-            moves: vec![RotationMove {
-                axis: RotationAxis::X,
-                index: i,
-                direction: Direction::Clockwise,
+        for _ in 0..100 {
+            let axis = axes[rng.random_range(0..3)];
+            let index = rng.random_range(0..size);
+            let direction = if rng.random_bool(0.5) {
+                Direction::Clockwise
+            } else {
+                Direction::CounterClockwise
+            };
+            cube.apply_move(RotationMove {
+                axis,
+                index,
+                direction,
                 add_to_history: true,
-            }],
-            cost: 1,
-        });
-        // CounterClockwise Inner Slice Turn
-        center_bases.push(Macro {
-            name: format!("Inner_Slice_Turn_CCW_s{}", i),
-            moves: vec![RotationMove {
-                axis: RotationAxis::X,
-                index: i,
-                direction: Direction::CounterClockwise,
-                add_to_history: true,
-            }],
-            cost: 1,
-        });
-        // Commutator base formulas
-        for j in 1..(size - 1) {
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Right_s{}_s{}", i, j),
-                moves: get_center1_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Left_s{}_s{}", i, j),
-                moves: get_center2_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Back_s{}_s{}", i, j),
-                moves: get_center3_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Front_s{}_s{}", i, j),
-                moves: get_center4_moves(size, i, j),
-                cost: 8,
             });
         }
-    }
-    let center_macros = generate_symmetric_macros(&center_bases, &rotations, size);
-    println!("Generated {} symmetric center macros.", center_macros.len());
 
-    println!("\n--- Starting Phase 1: Solving Centers (Adaptive Beam Search) ---");
-    let start_time = Instant::now();
-    let mut step = 1;
-    let mut visited_centers = HashSet::new();
-    visited_centers.insert(cube.clone());
+        println!("Test #{}: Scrambled. Misplaced: {}", i, count_misplaced_centers(&cube));
+        let start_solve = Instant::now();
+        let result = solve_cube_macro_hybrid(&mut cube, Some(&l2c_table));
+        let elapsed = start_solve.elapsed();
 
-    let max_center_steps = (total_centers * 2) as usize;
-    let mut solved = false;
-
-    loop {
-        let misplaced = count_misplaced_centers(&cube);
-        println!(
-            "  Step {}: Misplaced centers = {}/{}",
-            step, misplaced, total_centers
-        );
-        if misplaced == 0 {
-            println!("\n🎉 SUCCESS! All center pieces solved correctly!");
-            solved = true;
-            break;
-        }
-
-        let start_step = Instant::now();
-        // First try the fast search (beam width 50, depth 5)
-        let mut best_macros = solve_phase_beam_search(
-            &cube,
-            SolverPhase::Phase1Centers,
-            &center_macros,
-            50,
-            5,
-            &visited_centers,
-        );
-
-        if let Some(ref bm) = best_macros {
-            if bm.is_empty() {
-                // If stuck, fall back to deep search (beam width 300, depth 8)
-                println!(
-                    "     ℹ️ [Step {} stuck] Triggering Adaptive Deep Search fallback...",
-                    step
-                );
-                best_macros = solve_phase_beam_search(
-                    &cube,
-                    SolverPhase::Phase1Centers,
-                    &center_macros,
-                    300,
-                    8,
-                    &visited_centers,
-                );
-            }
-        }
-
-        if let Some(bm) = best_macros {
-            if bm.is_empty() {
-                println!("  ❌ FAILED: Beam search returned empty list (stuck!).");
-                print_misplaced_centers_details(&cube);
-                print_cube_faces_grid(&cube);
-                break;
-            }
-            println!(
-                "  -> Found path of {} macros in {:?}",
-                bm.len(),
-                start_step.elapsed()
-            );
-            for m in &bm {
-                println!("     * Apply macro: {}", m.name);
-                cube.apply_moves(&m.moves);
-                visited_centers.insert(cube.clone());
-            }
+        if result.is_some() && count_misplaced_centers(&cube) == 0 {
+            println!("  ✅ Solved in {:?}", elapsed);
+            success_count += 1;
+            solve_times.push(elapsed);
         } else {
-            println!("  ❌ FAILED: Beam search failed to find any path.");
-            break;
-        }
-
-        step += 1;
-        if step > max_center_steps {
-            println!("  ❌ FAILED: Step limit exceeded!");
-            break;
+            println!("  ❌ FAILED to solve centers.");
         }
     }
 
-    let elapsed = start_time.elapsed();
     println!("\n=====================================================");
-    println!("   TEST RESULTS: Centers Solved: {}", solved);
-    println!("   Total Time: {:?}", elapsed);
+    println!("   BENCHMARK RESULTS ({} tests)", num_tests);
+    println!("   Success Rate: {}%", (success_count as f32 / num_tests as f32) * 100.0);
+    if !solve_times.is_empty() {
+        let avg_time: std::time::Duration = solve_times.iter().sum::<std::time::Duration>() / solve_times.len() as u32;
+        println!("   Average Time: {:?}", avg_time);
+    }
     println!("=====================================================");
 }
 

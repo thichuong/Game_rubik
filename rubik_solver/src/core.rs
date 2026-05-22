@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
+use serde::{Deserialize, Serialize};
+
 /// Enum representing the 6 faces of a cube.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Face {
     Up,    // +Y (White)
     Down,  // -Y (Yellow)
@@ -45,7 +47,7 @@ impl Face {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RotationAxis {
     X,
     Y,
@@ -63,7 +65,7 @@ impl RotationAxis {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
     Clockwise,
     CounterClockwise,
@@ -79,7 +81,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RotationMove {
     pub axis: RotationAxis,
     pub index: i32,
