@@ -17,10 +17,10 @@ pub fn handle_mouse_input(
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     rubik_size: Res<RubikSize>,
     ui_interactions: Query<&Interaction>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
-    // Block mouse interactions if the solver is actively showing or searching
-    if solution.active || solution.is_searching {
+    // Block mouse interactions if the solver is actively searching or still has steps to execute
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         drag_state.start_face = None;
         return;
     }
@@ -148,6 +148,9 @@ pub fn handle_mouse_input(
                     // Block center layer rotations from mouse interaction
                     let size = rubik_size.size;
                     if size % 2 == 0 || index != size / 2 {
+                        if solution.active {
+                            solution.active = false;
+                        }
                         rotation_queue.0.push_back(RotationMove {
                             axis: best_axis,
                             index,
@@ -166,15 +169,18 @@ pub fn handle_keyboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut rotation_queue: ResMut<RotationQueue>,
     mut history: ResMut<MoveHistory>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     // Block keyboard undo/redo rotations when solver is active or searching
-    if solution.active || solution.is_searching {
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         return;
     }
 
     if keyboard.pressed(KeyCode::ControlLeft) && keyboard.just_pressed(KeyCode::KeyZ) {
         if let Some(last_move) = history.done.pop() {
+            if solution.active {
+                solution.active = false;
+            }
             let inverse_move = last_move.inverse();
             rotation_queue.0.push_back(inverse_move);
             history.undone.push(last_move);
@@ -183,6 +189,9 @@ pub fn handle_keyboard_input(
 
     if keyboard.pressed(KeyCode::ControlLeft) && keyboard.just_pressed(KeyCode::KeyY) {
         if let Some(last_undone) = history.undone.pop() {
+            if solution.active {
+                solution.active = false;
+            }
             let mut redo_move = last_undone;
             redo_move.add_to_history = true;
             rotation_queue.0.push_back(redo_move);

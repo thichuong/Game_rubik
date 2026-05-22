@@ -118,7 +118,7 @@ fn receive_hand_tracking(
     cubie_faces: Query<(Entity, &CubieFace, &GlobalTransform)>,
     cube_query: Single<&GlobalTransform, With<RubikCube>>,
     rubik_size: Res<RubikSize>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     let Some(receiver) = receiver else {
         return;
@@ -150,7 +150,10 @@ fn receive_hand_tracking(
 
     let hands = &data.hands;
 
-    if enabled.0 && !solution.active && !solution.is_searching {
+    if enabled.0
+        && !solution.is_searching
+        && !(solution.active && solution.current_step < solution.moves.len())
+    {
         let mut left_active = false;
         let mut right_active = false;
 
@@ -202,6 +205,9 @@ fn receive_hand_tracking(
                 if (drag_sub_state.prev_gesture_type == 2 || drag_sub_state.prev_gesture_type == 3)
                     && drag_sub_state.start_face.is_some()
                 {
+                    if solution.active {
+                        solution.active = false;
+                    }
                     execute_face_swipe_rotation(
                         hand.cursor,
                         data.width,

@@ -43,16 +43,19 @@ pub fn handle_shuffle_button(
     mut interaction_query: InteractionQuery<ShuffleButton>,
     mut rotation_queue: ResMut<RotationQueue>,
     rubik_size: Res<RubikSize>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
-    // Disable shuffling if solver is actively showing or searching to prevent logic conflicts
-    if solution.active || solution.is_searching {
+    // Disable shuffling if solver is actively searching or still has steps to execute
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         return;
     }
 
     for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
+                if solution.active {
+                    solution.active = false;
+                }
                 *bg_color = BackgroundColor(Color::Srgba(Srgba::new(0.25, 0.3, 0.55, 1.0)));
                 *border_color = BorderColor::all(Color::Srgba(Srgba::new(0.5, 0.6, 0.9, 1.0)));
 
@@ -598,10 +601,10 @@ pub fn handle_size_slider_track(
     >,
     mut is_dragging: Local<bool>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     // Disable size adjustment if solver is active or searching
-    if solution.active || solution.is_searching {
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         *is_dragging = false;
         return;
     }
@@ -633,6 +636,9 @@ pub fn handle_size_slider_track(
 
         if rubik_size.size != new_size {
             rubik_size.size = new_size;
+            if solution.active {
+                solution.active = false;
+            }
         }
     }
 }
@@ -641,16 +647,19 @@ pub fn handle_size_slider_track(
 pub fn handle_size_decrement_button(
     mut interaction_query: Query<&Interaction, (Changed<Interaction>, With<SizeDecrementButton>)>,
     mut rubik_size: ResMut<RubikSize>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     // Block sizing while solving
-    if solution.active || solution.is_searching {
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         return;
     }
 
     for interaction in &mut interaction_query {
         if matches!(*interaction, Interaction::Pressed) && rubik_size.size > 2 {
             rubik_size.size -= 1;
+            if solution.active {
+                solution.active = false;
+            }
         }
     }
 }
@@ -659,16 +668,19 @@ pub fn handle_size_decrement_button(
 pub fn handle_size_increment_button(
     mut interaction_query: Query<&Interaction, (Changed<Interaction>, With<SizeIncrementButton>)>,
     mut rubik_size: ResMut<RubikSize>,
-    solution: Res<StepByStepSolution>,
+    mut solution: ResMut<StepByStepSolution>,
 ) {
     // Block sizing while solving
-    if solution.active || solution.is_searching {
+    if solution.is_searching || (solution.active && solution.current_step < solution.moves.len()) {
         return;
     }
 
     for interaction in &mut interaction_query {
         if matches!(*interaction, Interaction::Pressed) && rubik_size.size < 12 {
             rubik_size.size += 1;
+            if solution.active {
+                solution.active = false;
+            }
         }
     }
 }
