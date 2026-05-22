@@ -371,15 +371,37 @@ pub fn generate_cube_rotations() -> Vec<CubeRotation> {
 #[derive(Clone)]
 pub struct Macro {
     pub name: String,
-    pub moves: Vec<RotationMove>,
+    pub setup: Vec<RotationMove>,
+    pub macro_seq: Vec<RotationMove>,
+    pub undo_setup: Vec<RotationMove>,
     pub cost: usize,
+}
+
+impl Macro {
+    pub fn all_moves(&self) -> Vec<RotationMove> {
+        let mut moves = self.setup.clone();
+        moves.extend(&self.macro_seq);
+        moves.extend(&self.undo_setup);
+        moves
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymmetricMacro {
     pub name: String,
-    pub moves: Vec<RotationMove>,
+    pub setup: Vec<RotationMove>,
+    pub macro_seq: Vec<RotationMove>,
+    pub undo_setup: Vec<RotationMove>,
     pub cost: usize,
+}
+
+impl SymmetricMacro {
+    pub fn all_moves(&self) -> Vec<RotationMove> {
+        let mut moves = self.setup.clone();
+        moves.extend(&self.macro_seq);
+        moves.extend(&self.undo_setup);
+        moves
+    }
 }
 
 pub fn generate_symmetric_macros(
@@ -392,15 +414,32 @@ pub fn generate_symmetric_macros(
 
     for base in base_macros {
         for (i, rot) in rotations.iter().enumerate() {
-            let mut transformed_moves = Vec::with_capacity(base.moves.len());
-            for &m in &base.moves {
-                transformed_moves.push(rot.transform_move(m, size));
+            let mut t_setup = Vec::with_capacity(base.setup.len());
+            for &m in &base.setup {
+                t_setup.push(rot.transform_move(m, size));
+            }
+            let mut t_seq = Vec::with_capacity(base.macro_seq.len());
+            for &m in &base.macro_seq {
+                t_seq.push(rot.transform_move(m, size));
+            }
+            let mut t_undo = Vec::with_capacity(base.undo_setup.len());
+            for &m in &base.undo_setup {
+                t_undo.push(rot.transform_move(m, size));
             }
 
-            if seen_moves.insert(transformed_moves.clone()) {
+            let all = {
+                let mut a = t_setup.clone();
+                a.extend(&t_seq);
+                a.extend(&t_undo);
+                a
+            };
+
+            if seen_moves.insert(all) {
                 sym_macros.push(SymmetricMacro {
                     name: format!("{}_rot{}", base.name, i),
-                    moves: transformed_moves,
+                    setup: t_setup,
+                    macro_seq: t_seq,
+                    undo_setup: t_undo,
                     cost: base.cost,
                 });
             }
@@ -1305,18 +1344,23 @@ pub fn generate_center_endgame_table(
     let mut table = HashMap::new();
     let solved_cube = VirtualCube::new(size);
 
-    let mut add_to_table = |moves: Vec<RotationMove>, name: String, cost: usize| {
+    let mut add_to_table = |mac: SymmetricMacro| {
+        let moves = mac.all_moves();
         let mut cube = solved_cube.clone();
         cube.apply_moves(&moves);
         let sig = get_misplaced_centers_signature(&cube);
         if sig.len() >= 2 && sig.len() <= 8 && !table.contains_key(&sig) {
+            // To solve this sig, we need to apply the inverse of the moves
+            // But we can represent it as a new SymmetricMacro
             let inv_moves = moves.iter().rev().map(|m| m.inverse()).collect();
             table.insert(
                 sig,
                 SymmetricMacro {
-                    name: format!("Solve_{}", name),
-                    moves: inv_moves,
-                    cost,
+                    name: format!("Solve_{}", mac.name),
+                    setup: Vec::new(),
+                    macro_seq: inv_moves,
+                    undo_setup: Vec::new(),
+                    cost: mac.cost,
                 },
             );
         }
@@ -1324,53 +1368,15 @@ pub fn generate_center_endgame_table(
 
     // Single commutator
     for mac in macros {
-        if mac.cost == 8 {
-            add_to_table(mac.moves.clone(), mac.name.clone(), mac.cost);
+        if mac.macro_seq.len() == 8 && mac.setup.is_empty() {
+            add_to_table(mac.clone());
         }
     }
 
-    // Outer face turns + Single commutator (Setup moves)
-    let outer_turns: Vec<_> = macros
-        .iter()
-        .filter(|m| m.name.starts_with("Outer_Face_Turn"))
-        .collect();
-
-    for setup1 in &outer_turns {
-        for mac in macros {
-            if mac.cost == 8 {
-                // Setup 1
-                let moves1 = {
-                    let mut m = setup1.moves.clone();
-                    m.extend(&mac.moves);
-                    m.extend(setup1.moves.iter().map(|mv| mv.inverse()));
-                    m
-                };
-                add_to_table(
-                    moves1,
-                    format!("{}+{}", setup1.name, mac.name),
-                    mac.cost + 2,
-                );
-
-                // Setup 1 + Setup 2
-                for setup2 in &outer_turns {
-                    if setup1.moves[0].axis == setup2.moves[0].axis {
-                        continue;
-                    }
-                    let moves2 = {
-                        let mut m = setup1.moves.clone();
-                        m.extend(&setup2.moves);
-                        m.extend(&mac.moves);
-                        m.extend(setup2.moves.iter().map(|mv| mv.inverse()));
-                        m.extend(setup1.moves.iter().map(|mv| mv.inverse()));
-                        m
-                    };
-                    add_to_table(
-                        moves2,
-                        format!("{}+{}+{}", setup1.name, setup2.name, mac.name),
-                        mac.cost + 4,
-                    );
-                }
-            }
+    // Macros with setups
+    for mac in macros {
+        if !mac.setup.is_empty() {
+            add_to_table(mac.clone());
         }
     }
     table
@@ -1620,7 +1626,7 @@ pub fn solve_phase_beam_search(
         while let Some(node) = current_beam.pop_front() {
             for (mac_idx, mac) in macros.iter().enumerate() {
                 let mut next_cube = node.cube.clone();
-                next_cube.apply_moves(&mac.moves);
+                next_cube.apply_moves(&mac.all_moves());
 
                 if global_visited.contains(&next_cube) || visited_states.contains(&next_cube) {
                     continue;
@@ -1695,69 +1701,129 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     // Clockwise Outer Face Turn
     center_bases.push(Macro {
         name: "Outer_Face_Turn_CW".to_string(),
-        moves: vec![RotationMove {
+        setup: Vec::new(),
+        macro_seq: vec![RotationMove {
             axis: RotationAxis::X,
             index: size - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         }],
+        undo_setup: Vec::new(),
         cost: 1,
     });
     // CounterClockwise Outer Face Turn
     center_bases.push(Macro {
         name: "Outer_Face_Turn_CCW".to_string(),
-        moves: vec![RotationMove {
+        setup: Vec::new(),
+        macro_seq: vec![RotationMove {
             axis: RotationAxis::X,
             index: size - 1,
             direction: Direction::CounterClockwise,
             add_to_history: true,
         }],
+        undo_setup: Vec::new(),
         cost: 1,
     });
     for i in 1..(size - 1) {
         // Clockwise Inner Slice Turn
         center_bases.push(Macro {
             name: format!("Inner_Slice_Turn_CW_s{i}"),
-            moves: vec![RotationMove {
+            setup: Vec::new(),
+            macro_seq: vec![RotationMove {
                 axis: RotationAxis::X,
                 index: i,
                 direction: Direction::Clockwise,
                 add_to_history: true,
             }],
+            undo_setup: Vec::new(),
             cost: 1,
         });
         // CounterClockwise Inner Slice Turn
         center_bases.push(Macro {
             name: format!("Inner_Slice_Turn_CCW_s{i}"),
-            moves: vec![RotationMove {
+            setup: Vec::new(),
+            macro_seq: vec![RotationMove {
                 axis: RotationAxis::X,
                 index: i,
                 direction: Direction::CounterClockwise,
                 add_to_history: true,
             }],
+            undo_setup: Vec::new(),
             cost: 1,
         });
         for j in 1..(size - 1) {
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Right_s{i}_s{j}"),
-                moves: get_center1_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Left_s{i}_s{j}"),
-                moves: get_center2_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Back_s{i}_s{j}"),
-                moves: get_center3_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Front_s{i}_s{j}"),
-                moves: get_center4_moves(size, i, j),
-                cost: 8,
-            });
+            let comms = vec![
+                (format!("Center_F_U_Right_s{i}_s{j}"), get_center1_moves(size, i, j)),
+                (format!("Center_F_U_Left_s{i}_s{j}"), get_center2_moves(size, i, j)),
+                (format!("Center_R_U_Back_s{i}_s{j}"), get_center3_moves(size, i, j)),
+                (format!("Center_R_U_Front_s{i}_s{j}"), get_center4_moves(size, i, j)),
+            ];
+
+            for (name, comm) in comms {
+                center_bases.push(Macro {
+                    name: name.clone(),
+                    setup: Vec::new(),
+                    macro_seq: comm.clone(),
+                    undo_setup: Vec::new(),
+                    cost: 8,
+                });
+
+                // Add Setup + Macro + Undo Setup combos
+                let outer_turns = vec![
+                    (
+                        "OuterU_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Y,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterU_CCW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Y,
+                            index: size - 1,
+                            direction: Direction::CounterClockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterF_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Z,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterR_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::X,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                ];
+
+                for (s_name, s_moves) in outer_turns {
+                    let mut undo = s_moves.clone();
+                    for m in &mut undo {
+                        *m = m.inverse();
+                    }
+                    undo.reverse();
+
+                    center_bases.push(Macro {
+                        name: format!("{s_name}+{name}"),
+                        setup: s_moves,
+                        macro_seq: comm.clone(),
+                        undo_setup: undo,
+                        cost: 10,
+                    });
+                }
+            }
         }
     }
     let center_macros = generate_symmetric_macros(&center_bases, &rotations, size);
@@ -1765,33 +1831,43 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     let mut edge_bases = Vec::new();
     edge_bases.push(Macro {
         name: "Outer_Face_Turn".to_string(),
-        moves: vec![RotationMove {
+        setup: Vec::new(),
+        macro_seq: vec![RotationMove {
             axis: RotationAxis::X,
             index: size - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         }],
+        undo_setup: Vec::new(),
         cost: 1,
     });
     edge_bases.push(Macro {
         name: "Edge_Flip".to_string(),
-        moves: get_edge_flip_moves(size),
+        setup: Vec::new(),
+        macro_seq: get_edge_flip_moves(size),
+        undo_setup: Vec::new(),
         cost: 7,
     });
     for i in 1..(size - 1) {
         edge_bases.push(Macro {
             name: format!("Edge_Pair_R_F_s{i}"),
-            moves: get_edge_pair_moves(size, i),
+            setup: Vec::new(),
+            macro_seq: get_edge_pair_moves(size, i),
+            undo_setup: Vec::new(),
             cost: 9,
         });
         edge_bases.push(Macro {
             name: format!("Last_Two_Edges_1_s{i}"),
-            moves: get_last_two_edges_1_moves(size, i),
+            setup: Vec::new(),
+            macro_seq: get_last_two_edges_1_moves(size, i),
+            undo_setup: Vec::new(),
             cost: 9,
         });
         edge_bases.push(Macro {
             name: format!("Last_Two_Edges_2_s{i}"),
-            moves: get_last_two_edges_2_moves(size, i),
+            setup: Vec::new(),
+            macro_seq: get_last_two_edges_2_moves(size, i),
+            undo_setup: Vec::new(),
             cost: 9,
         });
     }
@@ -1800,37 +1876,49 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     let stage3_bases = vec![
         Macro {
             name: "Outer_Face_Turn".to_string(),
-            moves: vec![RotationMove {
+            setup: Vec::new(),
+            macro_seq: vec![RotationMove {
                 axis: RotationAxis::X,
                 index: size - 1,
                 direction: Direction::Clockwise,
                 add_to_history: true,
             }],
+            undo_setup: Vec::new(),
             cost: 1,
         },
         Macro {
             name: "Corner_Cycle_Niklas".to_string(),
-            moves: get_niklas_8_moves(size),
+            setup: Vec::new(),
+            macro_seq: get_niklas_8_moves(size),
+            undo_setup: Vec::new(),
             cost: 8,
         },
         Macro {
             name: "Corner_Swap_T_Perm".to_string(),
-            moves: get_t_perm_moves(size),
+            setup: Vec::new(),
+            macro_seq: get_t_perm_moves(size),
+            undo_setup: Vec::new(),
             cost: 15,
         },
         Macro {
             name: "PLL_Parity".to_string(),
-            moves: get_pll_parity_moves(size),
+            setup: Vec::new(),
+            macro_seq: get_pll_parity_moves(size),
+            undo_setup: Vec::new(),
             cost: 12,
         },
         Macro {
             name: "OLL_Parity".to_string(),
-            moves: get_oll_parity_moves(size),
+            setup: Vec::new(),
+            macro_seq: get_oll_parity_moves(size),
+            undo_setup: Vec::new(),
             cost: 25,
         },
         Macro {
             name: "Edge_Flip_Stage3".to_string(),
-            moves: get_edge_flip_moves(size),
+            setup: Vec::new(),
+            macro_seq: get_edge_flip_moves(size),
+            undo_setup: Vec::new(),
             cost: 7,
         },
     ];
@@ -1865,8 +1953,9 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
             // Stage 2: Endgame Lookup
             let sig = get_misplaced_centers_signature(cube);
             if let Some(mac) = center_endgame_table.get(&sig) {
-                cube.apply_moves(&mac.moves);
-                for &mv in &mac.moves {
+                let moves = mac.all_moves();
+                cube.apply_moves(&moves);
+                for &mv in &moves {
                     solved_solution.push(mv);
                 }
                 continue;
@@ -1902,9 +1991,10 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 break;
             }
             for m in &bm {
-                cube.apply_moves(&m.moves);
+                let moves = m.all_moves();
+                cube.apply_moves(&moves);
                 global_visited_centers.insert(cube.clone());
-                for &mv in &m.moves {
+                for &mv in &moves {
                     solved_solution.push(mv);
                 }
             }
@@ -1956,9 +2046,10 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 break;
             }
             for m in &bm {
-                cube.apply_moves(&m.moves);
+                let moves = m.all_moves();
+                cube.apply_moves(&moves);
                 global_visited_edges.insert(cube.clone());
-                for &mv in &m.moves {
+                for &mv in &moves {
                     solved_solution.push(mv);
                 }
             }
@@ -2010,9 +2101,10 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 break;
             }
             for m in &bm {
-                cube.apply_moves(&m.moves);
+                let moves = m.all_moves();
+                cube.apply_moves(&moves);
                 global_visited_stage3.insert(cube.clone());
-                for &mv in &m.moves {
+                for &mv in &moves {
                     solved_solution.push(mv);
                 }
             }

@@ -60,70 +60,130 @@ fn main() {
     // Clockwise Outer Face Turn
     center_bases.push(Macro {
         name: "Outer_Face_Turn_CW".to_string(),
-        moves: vec![RotationMove {
+        setup: Vec::new(),
+        macro_seq: vec![RotationMove {
             axis: RotationAxis::X,
             index: size - 1,
             direction: Direction::Clockwise,
             add_to_history: true,
         }],
+        undo_setup: Vec::new(),
         cost: 1,
     });
     // CounterClockwise Outer Face Turn
     center_bases.push(Macro {
         name: "Outer_Face_Turn_CCW".to_string(),
-        moves: vec![RotationMove {
+        setup: Vec::new(),
+        macro_seq: vec![RotationMove {
             axis: RotationAxis::X,
             index: size - 1,
             direction: Direction::CounterClockwise,
             add_to_history: true,
         }],
+        undo_setup: Vec::new(),
         cost: 1,
     });
     for i in 1..(size - 1) {
         // Clockwise Inner Slice Turn
         center_bases.push(Macro {
             name: format!("Inner_Slice_Turn_CW_s{}", i),
-            moves: vec![RotationMove {
+            setup: Vec::new(),
+            macro_seq: vec![RotationMove {
                 axis: RotationAxis::X,
                 index: i,
                 direction: Direction::Clockwise,
                 add_to_history: true,
             }],
+            undo_setup: Vec::new(),
             cost: 1,
         });
         // CounterClockwise Inner Slice Turn
         center_bases.push(Macro {
             name: format!("Inner_Slice_Turn_CCW_s{}", i),
-            moves: vec![RotationMove {
+            setup: Vec::new(),
+            macro_seq: vec![RotationMove {
                 axis: RotationAxis::X,
                 index: i,
                 direction: Direction::CounterClockwise,
                 add_to_history: true,
             }],
+            undo_setup: Vec::new(),
             cost: 1,
         });
         // Commutator base formulas
         for j in 1..(size - 1) {
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Right_s{}_s{}", i, j),
-                moves: get_center1_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_F_U_Left_s{}_s{}", i, j),
-                moves: get_center2_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Back_s{}_s{}", i, j),
-                moves: get_center3_moves(size, i, j),
-                cost: 8,
-            });
-            center_bases.push(Macro {
-                name: format!("Center_R_U_Front_s{}_s{}", i, j),
-                moves: get_center4_moves(size, i, j),
-                cost: 8,
-            });
+            let comms = vec![
+                (format!("Center_F_U_Right_s{i}_s{j}"), get_center1_moves(size, i, j)),
+                (format!("Center_F_U_Left_s{i}_s{j}"), get_center2_moves(size, i, j)),
+                (format!("Center_R_U_Back_s{i}_s{j}"), get_center3_moves(size, i, j)),
+                (format!("Center_R_U_Front_s{i}_s{j}"), get_center4_moves(size, i, j)),
+            ];
+
+            for (name, comm) in comms {
+                center_bases.push(Macro {
+                    name: name.clone(),
+                    setup: Vec::new(),
+                    macro_seq: comm.clone(),
+                    undo_setup: Vec::new(),
+                    cost: 8,
+                });
+
+                // Add Setup + Macro + Undo Setup combos
+                let outer_turns = vec![
+                    (
+                        "OuterU_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Y,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterU_CCW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Y,
+                            index: size - 1,
+                            direction: Direction::CounterClockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterF_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::Z,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                    (
+                        "OuterR_CW",
+                        vec![RotationMove {
+                            axis: RotationAxis::X,
+                            index: size - 1,
+                            direction: Direction::Clockwise,
+                            add_to_history: true,
+                        }],
+                    ),
+                ];
+
+                for (s_name, s_moves) in outer_turns {
+                    let mut undo = s_moves.clone();
+                    for m in &mut undo {
+                        *m = m.inverse();
+                    }
+                    undo.reverse();
+
+                    center_bases.push(Macro {
+                        name: format!("{s_name}+{name}"),
+                        setup: s_moves,
+                        macro_seq: comm.clone(),
+                        undo_setup: undo,
+                        cost: 10,
+                    });
+                }
+            }
         }
     }
     let center_macros = generate_symmetric_macros(&center_bases, &rotations, size);
@@ -169,7 +229,8 @@ fn main() {
             let sig = get_misplaced_centers_signature(&cube);
             if let Some(mac) = center_endgame_table.get(&sig) {
                 println!("     ✅ [Lookup Success] Apply macro: {}", mac.name);
-                cube.apply_moves(&mac.moves);
+                let moves = mac.all_moves();
+                cube.apply_moves(&moves);
                 visited_centers.insert(cube.clone());
                 step += 1;
                 continue;
@@ -220,7 +281,8 @@ fn main() {
             );
             for m in &bm {
                 println!("     * Apply macro: {}", m.name);
-                cube.apply_moves(&m.moves);
+                let moves = m.all_moves();
+                cube.apply_moves(&moves);
                 visited_centers.insert(cube.clone());
             }
         } else {
