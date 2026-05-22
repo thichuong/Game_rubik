@@ -4,9 +4,10 @@
 use rand::RngExt;
 use rubik_solver::core::{Direction, Face, RotationAxis, RotationMove};
 use rubik_solver::macro_solver::{
-    Macro, SolverPhase, VirtualCube, count_misplaced_centers, generate_cube_rotations,
+    count_misplaced_centers, generate_center_endgame_table, generate_cube_rotations,
     generate_symmetric_macros, get_center1_moves, get_center2_moves, get_center3_moves,
-    get_center4_moves, solve_phase_beam_search,
+    get_center4_moves, get_misplaced_centers_signature, solve_phase_beam_search, Macro, SolverPhase,
+    VirtualCube,
 };
 use std::collections::HashSet;
 use std::time::Instant;
@@ -128,7 +129,7 @@ fn main() {
     let center_macros = generate_symmetric_macros(&center_bases, &rotations, size);
     println!("Generated {} symmetric center macros.", center_macros.len());
 
-    println!("\n--- Starting Phase 1: Solving Centers (Adaptive Beam Search) ---");
+    println!("\n--- Starting Phase 1: Solving Centers (Hybrid Architecture) ---");
     let start_time = Instant::now();
     let mut step = 1;
     let mut visited_centers = HashSet::new();
@@ -136,6 +137,18 @@ fn main() {
 
     let max_center_steps = (total_centers * 2) as usize;
     let mut solved = false;
+
+    let center_endgame_table = generate_center_endgame_table(&center_macros, size);
+    println!(
+        "Generated endgame table with {} signatures.",
+        center_endgame_table.len()
+    );
+
+    let solving_order = rubik_solver::macro_solver::get_face_solving_order(&cube);
+    println!("Solving order: {:?}", solving_order);
+    let center_phase = SolverPhase::Phase1Centers {
+        order: solving_order,
+    };
 
     loop {
         let misplaced = count_misplaced_centers(&cube);
@@ -150,13 +163,28 @@ fn main() {
         }
 
         let start_step = Instant::now();
-        // First try the fast search (beam width 50, depth 5)
+
+        if misplaced <= 8 {
+            println!("     🎯 [Endgame] Attempting lookup table...");
+            let sig = get_misplaced_centers_signature(&cube);
+            if let Some(mac) = center_endgame_table.get(&sig) {
+                println!("     ✅ [Lookup Success] Apply macro: {}", mac.name);
+                cube.apply_moves(&mac.moves);
+                visited_centers.insert(cube.clone());
+                step += 1;
+                continue;
+            } else {
+                println!("     ⚠️ [Lookup Fail] Signature not found in table. Falling back to beam search.");
+            }
+        }
+
+        // Stage 1: Greedy Shallow Search
         let mut best_macros = solve_phase_beam_search(
             &cube,
-            SolverPhase::Phase1Centers,
+            &center_phase,
             &center_macros,
-            50,
-            5,
+            15, // beam_width = 15
+            2,  // max_depth = 2
             &visited_centers,
         );
 
@@ -169,7 +197,7 @@ fn main() {
                 );
                 best_macros = solve_phase_beam_search(
                     &cube,
-                    SolverPhase::Phase1Centers,
+                    &center_phase,
                     &center_macros,
                     300,
                     8,

@@ -12,7 +12,7 @@
 use crate::core::{Direction, Face, RotationAxis, RotationMove};
 use bevy::prelude::*;
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1260,6 +1260,122 @@ pub fn get_oll_parity_moves(size: i32) -> Vec<RotationMove> {
     ]
 }
 
+pub fn get_misplaced_centers_signature(cube: &VirtualCube) -> Vec<(IVec3, Face)> {
+    let size = cube.size;
+    let mut misplaced = Vec::new();
+    for cubie in &cube.cubies {
+        if count_boundary_components(cubie.pos, size) == 1 {
+            let face_at = if cubie.pos.x == size - 1 {
+                Face::Right
+            } else if cubie.pos.x == 0 {
+                Face::Left
+            } else if cubie.pos.y == size - 1 {
+                Face::Up
+            } else if cubie.pos.y == 0 {
+                Face::Down
+            } else if cubie.pos.z == size - 1 {
+                Face::Front
+            } else if cubie.pos.z == 0 {
+                Face::Back
+            } else {
+                continue;
+            };
+
+            let normal = face_at.normal();
+            let local_dir = cubie.rotation.inverse() * normal;
+            if let Some(face_color) = Face::from_normal(local_dir) {
+                if face_color != face_at {
+                    misplaced.push((cubie.pos, face_color));
+                }
+            }
+        }
+    }
+    misplaced.sort_by(|a, b| {
+        a.0.x.cmp(&b.0.x)
+            .then(a.0.y.cmp(&b.0.y))
+            .then(a.0.z.cmp(&b.0.z))
+    });
+    misplaced
+}
+
+pub fn generate_center_endgame_table(
+    macros: &[SymmetricMacro],
+    size: i32,
+) -> HashMap<Vec<(IVec3, Face)>, SymmetricMacro> {
+    let mut table = HashMap::new();
+    let solved_cube = VirtualCube::new(size);
+
+    let mut add_to_table = |moves: Vec<RotationMove>, name: String, cost: usize| {
+        let mut cube = solved_cube.clone();
+        cube.apply_moves(&moves);
+        let sig = get_misplaced_centers_signature(&cube);
+        if sig.len() >= 2 && sig.len() <= 8 && !table.contains_key(&sig) {
+            let inv_moves = moves.iter().rev().map(|m| m.inverse()).collect();
+            table.insert(
+                sig,
+                SymmetricMacro {
+                    name: format!("Solve_{}", name),
+                    moves: inv_moves,
+                    cost,
+                },
+            );
+        }
+    };
+
+    // Single commutator
+    for mac in macros {
+        if mac.cost == 8 {
+            add_to_table(mac.moves.clone(), mac.name.clone(), mac.cost);
+        }
+    }
+
+    // Outer face turns + Single commutator (Setup moves)
+    let outer_turns: Vec<_> = macros
+        .iter()
+        .filter(|m| m.name.starts_with("Outer_Face_Turn"))
+        .collect();
+
+    for setup1 in &outer_turns {
+        for mac in macros {
+            if mac.cost == 8 {
+                // Setup 1
+                let moves1 = {
+                    let mut m = setup1.moves.clone();
+                    m.extend(&mac.moves);
+                    m.extend(setup1.moves.iter().map(|mv| mv.inverse()));
+                    m
+                };
+                add_to_table(
+                    moves1,
+                    format!("{}+{}", setup1.name, mac.name),
+                    mac.cost + 2,
+                );
+
+                // Setup 1 + Setup 2
+                for setup2 in &outer_turns {
+                    if setup1.moves[0].axis == setup2.moves[0].axis {
+                        continue;
+                    }
+                    let moves2 = {
+                        let mut m = setup1.moves.clone();
+                        m.extend(&setup2.moves);
+                        m.extend(&mac.moves);
+                        m.extend(setup2.moves.iter().map(|mv| mv.inverse()));
+                        m.extend(setup1.moves.iter().map(|mv| mv.inverse()));
+                        m
+                    };
+                    add_to_table(
+                        moves2,
+                        format!("{}+{}+{}", setup1.name, setup2.name, mac.name),
+                        mac.cost + 4,
+                    );
+                }
+            }
+        }
+    }
+    table
+}
+
 pub fn count_misplaced_centers_on_face(cube: &VirtualCube, face: Face) -> usize {
     let size = cube.size;
     let mut count = 0;
@@ -1274,14 +1390,7 @@ pub fn count_misplaced_centers_on_face(cube: &VirtualCube, face: Face) -> usize 
                 Face::Back => cubie.pos.z == 0,
             };
             if is_on_face {
-                let normal = match face {
-                    Face::Right => Vec3::X,
-                    Face::Left => Vec3::NEG_X,
-                    Face::Up => Vec3::Y,
-                    Face::Down => Vec3::NEG_Y,
-                    Face::Front => Vec3::Z,
-                    Face::Back => Vec3::NEG_Z,
-                };
+                let normal = face.normal();
                 let local_dir = cubie.rotation.inverse() * normal;
                 if Face::from_normal(local_dir) != Some(face) {
                     count += 1;
@@ -1292,50 +1401,90 @@ pub fn count_misplaced_centers_on_face(cube: &VirtualCube, face: Face) -> usize 
     count
 }
 
-#[allow(clippy::option_if_let_else)]
-pub fn count_misplaced_centers_staged(cube: &VirtualCube) -> usize {
+pub fn get_face_solving_order(cube: &VirtualCube) -> Vec<Face> {
     let faces = [
-        Face::Right,
-        Face::Left,
         Face::Up,
         Face::Down,
         Face::Front,
         Face::Back,
+        Face::Left,
+        Face::Right,
     ];
+    let mut densities: Vec<(Face, usize)> = faces
+        .iter()
+        .map(|&f| {
+            let misplaced = count_misplaced_centers_on_face(cube, f);
+            let total = (cube.size - 2) * (cube.size - 2);
+            (f, total as usize - misplaced)
+        })
+        .collect();
+
+    // Sort by density descending
+    densities.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut order = Vec::new();
+    let mut remaining: HashSet<Face> = faces.iter().copied().collect();
+
+    while !remaining.is_empty() {
+        // Pick densest remaining
+        if let Some(&(best_face, _)) = densities.iter().find(|(f, _)| remaining.contains(f)) {
+            order.push(best_face);
+            remaining.remove(&best_face);
+
+            let opposite = match best_face {
+                Face::Up => Face::Down,
+                Face::Down => Face::Up,
+                Face::Front => Face::Back,
+                Face::Back => Face::Front,
+                Face::Left => Face::Right,
+                Face::Right => Face::Left,
+            };
+
+            if remaining.contains(&opposite) {
+                order.push(opposite);
+                remaining.remove(&opposite);
+            }
+        } else {
+            break;
+        }
+    }
+    order
+}
+
+#[allow(clippy::option_if_let_else)]
+pub fn count_misplaced_centers_staged(cube: &VirtualCube, order: &[Face]) -> usize {
     let mut misplaced_by_face = [0; 6];
-    for (i, &face) in faces.iter().enumerate() {
+    for (i, &face) in order.iter().enumerate() {
         misplaced_by_face[i] = count_misplaced_centers_on_face(cube, face);
     }
 
-    // Find the first unsolved face and count total unsolved faces
-    let mut first_unsolved_idx = None;
-    let mut unsolved_count = 0;
-    for (i, _) in faces.iter().enumerate() {
+    // Phase 1-4: Solve faces individually in order
+    for i in 0..4 {
         if misplaced_by_face[i] > 0 {
-            if first_unsolved_idx.is_none() {
-                first_unsolved_idx = Some(i);
-            }
-            unsolved_count += 1;
+            let remaining_unsolved = (i..6).filter(|&j| misplaced_by_face[j] > 0).count();
+            return remaining_unsolved * 1000 + misplaced_by_face[i];
         }
     }
 
-    if let Some(idx) = first_unsolved_idx {
-        unsolved_count * 1000 + misplaced_by_face[idx]
-    } else {
-        0
+    // Phase 5: Last Two Centers (L2C) - Solve faces 5 and 6 together
+    let l2c_misplaced = misplaced_by_face[4] + misplaced_by_face[5];
+    if l2c_misplaced > 0 {
+        return l2c_misplaced;
     }
+
+    0
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum SolverPhase {
-    Phase1Centers,
+    Phase1Centers { order: Vec<Face> },
     Phase2Edges,
     Phase3CornersAndParity,
 }
 
-fn evaluate_heuristic(cube: &VirtualCube, phase: SolverPhase) -> usize {
+fn evaluate_heuristic(cube: &VirtualCube, phase: &SolverPhase) -> usize {
     match phase {
-        SolverPhase::Phase1Centers => count_misplaced_centers(cube),
+        SolverPhase::Phase1Centers { order } => count_misplaced_centers_staged(cube, order),
         SolverPhase::Phase2Edges => count_unpaired_edges(cube),
         SolverPhase::Phase3CornersAndParity => cube.count_misplaced_stickers(),
     }
@@ -1442,7 +1591,7 @@ struct SearchNode {
 #[allow(clippy::implicit_hasher)]
 pub fn solve_phase_beam_search(
     cube: &VirtualCube,
-    phase: SolverPhase,
+    phase: &SolverPhase,
     macros: &[SymmetricMacro],
     beam_width: usize,
     max_depth: usize,
@@ -1695,10 +1844,16 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     let max_edge_steps = (total_edges * 2) as usize;
     let max_stage3_steps = 50;
 
-    // Phase 1: Solving Centers
+    // Phase 1: Solving Centers (Hybrid: Greedy Shallow Search + Endgame Lookup)
     let mut step = 1;
     let mut global_visited_centers = HashSet::new();
     global_visited_centers.insert(cube.clone());
+
+    let center_endgame_table = generate_center_endgame_table(&center_macros, size);
+    let solving_order = get_face_solving_order(cube);
+    let center_phase = SolverPhase::Phase1Centers {
+        order: solving_order,
+    };
 
     loop {
         let misplaced = count_misplaced_centers(cube);
@@ -1706,12 +1861,25 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
             break;
         }
 
+        if misplaced <= 8 {
+            // Stage 2: Endgame Lookup
+            let sig = get_misplaced_centers_signature(cube);
+            if let Some(mac) = center_endgame_table.get(&sig) {
+                cube.apply_moves(&mac.moves);
+                for &mv in &mac.moves {
+                    solved_solution.push(mv);
+                }
+                continue;
+            }
+        }
+
+        // Stage 1: Greedy Shallow Search
         let mut best_macros = solve_phase_beam_search(
             cube,
-            SolverPhase::Phase1Centers,
+            &center_phase,
             &center_macros,
-            50,
-            5,
+            15, // beam_width = 15
+            2,  // max_depth = 2
             &global_visited_centers,
         );
 
@@ -1720,7 +1888,7 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 // Adaptive Fallback: search deeper if stuck
                 best_macros = solve_phase_beam_search(
                     cube,
-                    SolverPhase::Phase1Centers,
+                    &center_phase,
                     &center_macros,
                     300,
                     8,
@@ -1762,7 +1930,7 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
 
         let mut best_macros = solve_phase_beam_search(
             cube,
-            SolverPhase::Phase2Edges,
+            &SolverPhase::Phase2Edges,
             &edge_macros,
             50,
             5,
@@ -1774,7 +1942,7 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 // Adaptive Fallback: search deeper if stuck
                 best_macros = solve_phase_beam_search(
                     cube,
-                    SolverPhase::Phase2Edges,
+                    &SolverPhase::Phase2Edges,
                     &edge_macros,
                     300,
                     8,
@@ -1816,7 +1984,7 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
 
         let mut best_macros = solve_phase_beam_search(
             cube,
-            SolverPhase::Phase3CornersAndParity,
+            &SolverPhase::Phase3CornersAndParity,
             &stage3_macros,
             50,
             6,
@@ -1828,7 +1996,7 @@ pub fn solve_cube_macro(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
                 // Adaptive Fallback: search deeper if stuck
                 best_macros = solve_phase_beam_search(
                     cube,
-                    SolverPhase::Phase3CornersAndParity,
+                    &SolverPhase::Phase3CornersAndParity,
                     &stage3_macros,
                     300,
                     8,
