@@ -1,4 +1,3 @@
-
 use crate::events::CameraFrameEvent;
 use crate::input::hand_tracking::HandTrackingEnabled;
 use crate::ui::components::{CameraFeedImage, CameraTrackingButton, CameraTrackingText};

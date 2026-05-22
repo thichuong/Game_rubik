@@ -156,6 +156,7 @@ pub fn move_to_string(m: RotationMove, size: i32, mapping: FaceMapping) -> Strin
     mapping.physical_move_to_logic_string(m, size)
 }
 
+#[allow(clippy::cast_sign_loss)]
 pub fn get_cube_state_for_size(
     size: i32,
     faces: &Query<(&CubieFace, &GlobalTransform)>,
@@ -212,6 +213,10 @@ pub fn get_cube_state_for_size(
         }
 
         Some(state.into_iter().collect())
+    } else if size >= 4 {
+        let state =
+            crate::nxn::state::NxNState::from_bevy(size as usize, faces, cube_transform, mapping)?;
+        Some(state.to_string_rep())
     } else {
         None
     }

@@ -122,29 +122,15 @@ pub fn handle_solve_button(
                 let size = rubik_size.size;
 
                 // Scrape the Rubik's cube state safely on the main thread since queries cannot cross threads
-                let state_str_opt = if size >= 4 {
-                    rubik_solver::nxn::state::NxNState::from_bevy(
-                        size as usize,
-                        &faces,
-                        &cube_query,
-                        *face_mapping,
-                    )
-                    .map(|state| state.to_string_rep())
-                } else {
-                    rubik_solver::get_cube_state_for_size(size, &faces, &cube_query, *face_mapping)
-                };
-
-                if let Some(state_str) = state_str_opt {
+                if let Some(state_str) =
+                    helpers::get_cube_state_for_size(size, &faces, &cube_query, *face_mapping)
+                {
                     let thread_pool = bevy::tasks::AsyncComputeTaskPool::get();
                     let table_arc = solver_res.table.clone();
 
                     // Spawn the solver inside Bevy's async task pool to prevent the main thread from freezing
                     let task = thread_pool.spawn(async move {
-                        if size >= 4 {
-                            rubik_solver::solver::solve_nxn_state_only(&state_str)
-                        } else {
-                            rubik_solver::solver::solve_cube(&state_str, &table_arc)
-                        }
+                        rubik_solver::solver::solve_cube_for_size(size, &state_str, &table_arc)
                     });
 
                     commands.insert_resource(SolverTask(task));

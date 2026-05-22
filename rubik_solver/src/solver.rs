@@ -1,6 +1,3 @@
-use crate::core::{CubieFace, FaceMapping};
-use crate::helpers;
-use bevy::prelude::*;
 use kewb::{CubieCube, DataTable, FaceCube, Solver};
 
 /// Pure function to invoke the Python solver for `NxN` (size >= 4) with a given state string.
@@ -58,24 +55,13 @@ pub fn solve_nxn_state_only(state_str: &str) -> Option<Vec<String>> {
 }
 
 /// Unified solver function for all supported cube sizes.
-/// It fetches the cube state using the relevant mapping and solves it using the Kociemba table or Python solver.
+/// It solves the cube state using the Kociemba table or Python solver.
 #[allow(clippy::cast_sign_loss)]
-pub fn solve_cube_for_size(
-    size: i32,
-    faces: &Query<(&CubieFace, &GlobalTransform)>,
-    cube_transform: &GlobalTransform,
-    mapping: FaceMapping,
-    table: &DataTable,
-) -> Option<Vec<String>> {
+pub fn solve_cube_for_size(size: i32, state_str: &str, table: &DataTable) -> Option<Vec<String>> {
     if size >= 4 {
-        // Scrape the current logical cube state using Bevy entities
-        let state =
-            crate::nxn::state::NxNState::from_bevy(size as usize, faces, cube_transform, mapping)?;
-        let state_str = state.to_string_rep();
-        solve_nxn_state_only(&state_str)
+        solve_nxn_state_only(state_str)
     } else {
-        let state_str = helpers::get_cube_state_for_size(size, faces, cube_transform, mapping)?;
-        solve_cube(&state_str, table)
+        solve_cube(state_str, table)
     }
 }
 

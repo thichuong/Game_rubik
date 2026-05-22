@@ -344,9 +344,11 @@ fn run_verification_test(size: i32, seed: u64, table: &kewb::DataTable) {
         .unwrap();
 
     // Call unified solver API directly on Bevy entities
-    let solution_moves_strings =
-        rubik_solver::solve_cube_for_size(size, &bevy_faces, &cube_transform, mapping, table)
-            .expect("Unified Bevy solver failed to find a solution!");
+    let state_str =
+        rubik_solver::helpers::get_cube_state_for_size(size, &bevy_faces, &cube_transform, mapping)
+            .expect("Failed to get scrambled cube state!");
+    let solution_moves_strings = rubik_solver::solve_cube_for_size(size, &state_str, table)
+        .expect("Unified Bevy solver failed to find a solution!");
 
     println!(
         "   Solver returned a sequence of {} moves.",
