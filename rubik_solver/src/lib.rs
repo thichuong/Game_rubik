@@ -1,5 +1,6 @@
 pub mod core;
 pub mod helpers;
+pub mod macro_solver;
 pub mod plugin;
 pub mod resources;
 pub mod solver;

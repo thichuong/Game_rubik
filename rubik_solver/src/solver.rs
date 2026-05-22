@@ -159,14 +159,32 @@ pub fn solve_nxn_state_only(state_str: &str) -> Option<Vec<String>> {
 }
 
 /// Unified solver function for all supported cube sizes.
-/// It solves the cube state using the Kociemba table or Python solver.
+/// It solves the cube state using Kociemba, Python daemon, or dynamic macro solver.
 #[allow(clippy::cast_sign_loss)]
 pub fn solve_cube_for_size(size: i32, state_str: &str, table: &DataTable) -> Option<Vec<String>> {
-    if size >= 4 {
+    if size >= 6 {
+        solve_nxn_macro(size, state_str)
+    } else if size >= 4 {
         solve_nxn_state_only(state_str)
     } else {
         solve_cube(state_str, table)
     }
+}
+
+pub fn solve_nxn_macro(size: i32, state_str: &str) -> Option<Vec<String>> {
+    use crate::macro_solver::VirtualCube;
+    let mut cube = VirtualCube::from_state_str(size, state_str)?;
+    let moves = crate::macro_solver::solve_cube_macro(&mut cube)?;
+    let mut move_strings = Vec::with_capacity(moves.len());
+    for m in moves {
+        let s = crate::helpers::physical_move_to_logical_string_any(
+            m,
+            size,
+            crate::core::FaceMapping::default(),
+        );
+        move_strings.push(s);
+    }
+    Some(move_strings)
 }
 
 pub fn solve_cube(state_str: &str, table: &DataTable) -> Option<Vec<String>> {

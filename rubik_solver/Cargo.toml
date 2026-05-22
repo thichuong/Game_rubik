@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.18" }
 kewb = "0.4.3"
+rand = { version = "0.10.1", features = ["thread_rng"] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
