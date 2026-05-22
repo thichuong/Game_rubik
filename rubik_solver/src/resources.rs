@@ -7,6 +7,13 @@ pub struct SolverResource {
     pub table: Arc<DataTable>,
 }
 
+impl Drop for SolverResource {
+    fn drop(&mut self) {
+        // Shutdown the daemon when the resource is dropped (app exit)
+        crate::solver::shutdown_daemon(10023);
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct StepByStepSolution {
     pub moves: Vec<String>,
