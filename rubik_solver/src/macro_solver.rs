@@ -1335,7 +1335,7 @@ pub enum SolverPhase {
 
 fn evaluate_heuristic(cube: &VirtualCube, phase: SolverPhase) -> usize {
     match phase {
-        SolverPhase::Phase1Centers => count_misplaced_centers_staged(cube),
+        SolverPhase::Phase1Centers => count_misplaced_centers(cube),
         SolverPhase::Phase2Edges => count_unpaired_edges(cube),
         SolverPhase::Phase3CornersAndParity => cube.count_misplaced_stickers(),
     }
