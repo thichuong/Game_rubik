@@ -43,15 +43,18 @@ graph TD
         SolverPlugin["SolverPlugin"]
         StepByStep["StepByStepSolution Resource"]
         
-        subgraph RubikSolverLib ["📚 rubik_solver Crate (Python Solver Bridge)"]
+        subgraph RubikSolverLib ["📚 rubik_solver Crate (Python Daemon Bridge & Rust 3x3)"]
             UnifiedEntry["solve_cube_for_size <br>(Unified Entry Point)"]
             
-            subgraph PythonSolvers ["🐍 Python Solver Background Worker"]
-                Kociemba["python3 -c import kociemba <br>(Fast 3x3x3 solver)"]
-                BigCubeSolver["rubiks-cube-solver.py <br>(General NxNxN solver)"]
+            subgraph RustSolver ["🦀 Pure Rust Solver"]
+                Kewb["kewb Crate <br>(Fast 3x3x3 optimal solver)"]
             end
             
-            NxNState["NxNState <br>(Bevy Entity Scraper & State Rep)"]
+            subgraph PythonSolvers ["🐍 Python Solver Background Daemon"]
+                NxnDaemon["nxn_daemon.py <br>(Persistent TCP Socket Daemon)"]
+                BigCubeSolver["rubiks-cube-NxNxN-solver <br>(General NxNxN solver)"]
+            end
+            
             MoveParser["MoveParser Adapter <br>(Advanced wide/slice string moves parsing)"]
         end
     end
@@ -93,11 +96,12 @@ graph TD
     UiPlugin -->|Triggers Solve/Steps| SolverPlugin
     UiPlugin -->|Calls solve_cube_for_size| UnifiedEntry
     
-    UnifiedEntry -->|1. Scraping Bevy Entities| NxNState
-    UnifiedEntry -->|2. Fast path (N=3)| Kociemba
-    UnifiedEntry -->|3. General path (N!=3)| BigCubeSolver
+    UnifiedEntry -->|1. Scrapes Bevy Entities directly| StateScraping["helpers.rs Scraper"]
+    UnifiedEntry -->|2. Fast path (N=3)| Kewb
+    UnifiedEntry -->|3. NxN path (N>=4)| NxnDaemon
+    NxnDaemon -->|Invokes| BigCubeSolver
     
-    Kociemba -->|4. Return solution string| MoveParser
+    Kewb -->|4. Return solution string| MoveParser
     BigCubeSolver -->|4. Return solution string| MoveParser
     
     MoveParser -->|5. Translate to physical RotationMove vec| SolverPlugin
@@ -183,37 +187,37 @@ Provides the control HUD, settings sidebars, camera feeds, and modular component
         *   `app.rs`: General system integrations (like exit button events).
 
 ### 4. Solver Module & Unified Engine (`src/solver` & `rubik_solver`)
-Integrates physical 3D ECS entities with background mathematical Python subprocesses.
+Integrates physical 3D ECS entities with background high-performance solvers (Rust 3x3 solver and Python daemon NxN solver).
 
 ```
-[Bevy 3D Entities] -> [NxNState Scraping] -> [to_string_rep()] -> [Python Solver Subprocess]
-                                                                         |
-                                   +-------------------------------------+
-                                   |
-                                   v
-             +--------------------+--------------------+
-             | (If size == 3)                          | (If size != 3)
-             v                                         v
-     [Python Kociemba]                       [rubiks-cube-solver.py]
-   (Super-fast milliseconds solve)            (Unified NxN Reduction Solver)
-             |                                         |
-             +--------------------+--------------------+
-                                   |
-                                   v
-                         [Solution stdout string]
-                                   |
-                                   v
-                       [Smart Rust MoveParser]
-           (Translates wide moves, depths, and slice indices)
-                                   |
-                                   v
-                       [Vec<RotationMove> output]
+[Bevy 3D Entities] -> [Direct Raycast Scraper] -> [Flat color string representation]
+                                                              |
+                                  +---------------------------+
+                                  |
+                                  v
+            +--------------------+--------------------+
+            | (If size == 3)                          | (If size >= 4)
+            v                                         v
+     [Pure Rust kewb Crate]                  [Python TCP Daemon]
+    (Super-fast optimal 3x3)              (Persistent Socket Connection)
+            |                                         |
+            +--------------------+--------------------+
+                                 |
+                                 v
+                       [Solution move string]
+                                 |
+                                 v
+                     [Smart Rust MoveParser]
+         (Translates wide moves, depths, and slice indices)
+                                 |
+                                 v
+                     [Vec<RotationMove> output]
 ```
 
-*   **State Scraping**: Iterates over physical Bevy entities (`CubieFace`), computes face orientation normals, and constructs a standard flat facelet string representation.
-*   **Subprocess Orchestration**:
-    *   **Kociemba Path (N=3)**: Invokes `kociemba.solve('<state>')` via inline Python for sub-5ms optimal results.
-    *   **NxN Reduction Path (N!=3)**: Spawns the general Python reduction solver, setting proper asset lookups (`lookup-tables/`) for correct multi-layered executions.
+*   **State Scraping**: Iterates over physical Bevy entities (`CubieFace`), projects coordinate positions using 3D normals, and constructs standard flat color string representations dynamically for any size.
+*   **Solver Orchestration**:
+    *   **3x3 Path (N=3)**: Invokes the pure-Rust `kewb` solver crate, which resolves optimal moves in milliseconds without any external subprocess overhead.
+    *   **NxN Path (N>=4)**: Connects to a persistent background Python daemon (`python_solver/nxn_daemon.py`) via local TCP sockets to solve large cubes. This bypasses subprocess startup lag and ensures sub-second response times.
 *   **Smart Move Parser Adapter (`rubik_solver::helpers`)**: Parses solved sequence strings and breaks them down into standard physical animations:
     *   *Standard turns* (e.g. `U`, `R'`, `F2`): Rotates the outer face layer.
     *   *Wide turns* (e.g. `Rw`, `3Uw2`): Rotates multiple outer-to-inner layers simultaneously.

@@ -1,6 +1,5 @@
 pub mod core;
 pub mod helpers;
-pub mod nxn;
 pub mod plugin;
 pub mod resources;
 pub mod solver;

@@ -214,9 +214,51 @@ pub fn get_cube_state_for_size(
 
         Some(state.into_iter().collect())
     } else if size >= 4 {
-        let state =
-            crate::nxn::state::NxNState::from_bevy(size as usize, faces, cube_transform, mapping)?;
-        Some(state.to_string_rep())
+        let size_usize = size as usize;
+        let mut state = vec![' '; 6 * size_usize * size_usize];
+        #[allow(clippy::cast_precision_loss)]
+        let size_f32 = size as f32;
+        let step = 3.0 / size_f32;
+        let half_size = size_f32 / 2.0;
+
+        let logic_faces = [
+            Face::Up,
+            Face::Right,
+            Face::Front,
+            Face::Down,
+            Face::Left,
+            Face::Back,
+        ];
+
+        for (face_idx, &logic_face) in logic_faces.iter().enumerate() {
+            let (phys_face, right_vec, down_vec) = mapping.get_face_config(logic_face);
+            let normal = phys_face.normal();
+
+            for row in 0..size_usize {
+                for col in 0..size_usize {
+                    #[allow(clippy::cast_precision_loss)]
+                    let i = (col as f32 + 0.5 - half_size) * step;
+                    #[allow(clippy::cast_precision_loss)]
+                    let j = (row as f32 + 0.5 - half_size) * step;
+                    let target_pos = normal * 1.5 + right_vec * i + down_vec * j;
+
+                    let color = find_facelet_color_at(target_pos, normal, faces, cube_transform)?;
+
+                    let logic_color = mapping.get_logic_face_for_physical(color);
+                    let ch = match logic_color {
+                        Face::Up => 'U',
+                        Face::Right => 'R',
+                        Face::Front => 'F',
+                        Face::Down => 'D',
+                        Face::Left => 'L',
+                        Face::Back => 'B',
+                    };
+                    state[face_idx * size_usize * size_usize + row * size_usize + col] = ch;
+                }
+            }
+        }
+
+        Some(state.into_iter().collect())
     } else {
         None
     }
