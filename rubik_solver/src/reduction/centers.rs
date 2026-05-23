@@ -1,10 +1,11 @@
 use crate::state::{Color, Cube};
 
-/// Solves centers for any `NxN` cube.
+/// Solves centers for any `NxN` cube using commutators.
 pub fn solve_centers(cube: &mut Cube) -> Vec<String> {
     let mut moves = Vec::new();
-    let faces = [Color::U, Color::D, Color::L, Color::R, Color::F, Color::B];
-    for &face in &faces {
+    let solve_order = [Color::U, Color::D, Color::L, Color::R, Color::F, Color::B];
+
+    for &face in &solve_order {
         moves.extend(solve_single_face_centers(cube, face));
     }
     moves
@@ -13,6 +14,7 @@ pub fn solve_centers(cube: &mut Cube) -> Vec<String> {
 fn solve_single_face_centers(cube: &mut Cube, face: Color) -> Vec<String> {
     let mut moves = Vec::new();
     let size = cube.size;
+
     for r in 1..size - 1 {
         for c in 1..size - 1 {
             if cube.get_color(face, r, c) != face {
@@ -28,6 +30,7 @@ fn solve_single_face_centers(cube: &mut Cube, face: Color) -> Vec<String> {
 fn find_and_move_center(cube: &mut Cube, target_face: Color, target_r: usize, target_c: usize) -> Option<Vec<String>> {
     let size = cube.size;
     let faces = [Color::U, Color::D, Color::L, Color::R, Color::F, Color::B];
+
     for &f in &faces {
         if f == target_face { continue; }
         for r in 1..size - 1 {
@@ -46,8 +49,11 @@ fn find_and_move_center(cube: &mut Cube, target_face: Color, target_r: usize, ta
 }
 
 /// A standard 3-cycle center commutator macro.
+/// Formula: [A, B] = A B A' B'
+/// Example for U and F: cR' dD cR dD'
 pub fn get_center_commutator(f1: Color, _r1: usize, c1: usize, f2: Color, r2: usize, _c2: usize) -> String {
     if f1 == Color::U && f2 == Color::F {
+        // Move piece from F face to U face at specific intersection
         return format!("{}R' {}D {}R {}D'", c1 + 1, r2 + 1, c1 + 1, r2 + 1);
     }
     String::new()
