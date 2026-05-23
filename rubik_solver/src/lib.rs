@@ -3,6 +3,12 @@ pub mod helpers;
 pub mod plugin;
 pub mod resources;
 pub mod solver;
+pub mod state;
+pub mod moves;
+pub mod reduction;
+pub mod lbl_3x3;
+#[cfg(test)]
+pub mod tests;
 
 pub use core::{CubieFace, Direction, Face, FaceMapping, RotationAxis, RotationMove};
 pub use helpers::{
