@@ -56,7 +56,7 @@ fn main() {
             });
         }
 
-        println!("Test #{}: Scrambled. Misplaced: {}", i, count_misplaced_centers(&cube));
+        println!("\nTest #{}: Scrambled. Misplaced: {}", i, count_misplaced_centers(&cube));
         let start_solve = Instant::now();
         let result = solve_cube_macro_hybrid(&mut cube, Some(&l2c_table));
         let elapsed = start_solve.elapsed();

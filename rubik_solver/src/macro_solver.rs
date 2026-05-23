@@ -1937,6 +1937,7 @@ fn solve_cube_macro_old(cube: &mut VirtualCube) -> Option<Vec<RotationMove>> {
     let max_stage3_steps = 50;
 
     // Phase 1: Solving Centers
+    let start_p1 = std::time::Instant::now();
     let mut step = 1;
     let mut global_visited_centers = HashSet::new();
     global_visited_centers.insert(cube.clone());
@@ -2342,7 +2343,9 @@ pub fn solve_cube_macro_hybrid(
         // Endgame Lookup (Phase 1 Giai đoạn 2)
         if misplaced_raw <= 8 {
             if let Some(table) = l2c_table {
+                let start_l2c = std::time::Instant::now();
                 if let Some(l2c_moves) = solve_l2c_lookup(cube, table) {
+                    println!("    ⚡ [L2C Lookup] Found endgame in {:?}", start_l2c.elapsed());
                     cube.apply_moves(&l2c_moves);
                     solved_solution.extend(l2c_moves);
                     break;
@@ -2351,12 +2354,13 @@ pub fn solve_cube_macro_hybrid(
         }
 
         // Determine if we should use coarse or fine search
-        let (macros_to_use, bw, depth) = if misplaced_raw > 8 {
-            (&all_center_macros, 15, 2)
+        let (macros_to_use, bw, depth, mode) = if misplaced_raw > 8 {
+            (&all_center_macros, 15, 2, "Coarse")
         } else {
-            (&pure_center_macros, 50, 5)
+            (&pure_center_macros, 50, 5, "Fine")
         };
 
+        let start_beam = std::time::Instant::now();
         let mut best_macros = solve_phase_beam_search(
             cube,
             SolverPhase::Phase1Centers,
@@ -2365,6 +2369,7 @@ pub fn solve_cube_macro_hybrid(
             depth,
             &global_visited_centers,
         );
+        println!("    🔍 [Beam Search] Step {} ({}) took {:?}", step, mode, start_beam.elapsed());
 
         if let Some(ref bm) = best_macros {
             if bm.is_empty() {
@@ -2402,7 +2407,10 @@ pub fn solve_cube_macro_hybrid(
         }
     }
 
+    println!("  ✅ Phase 1 (Centers) solved in {:?}", start_p1.elapsed());
+
     // Phase 2: Solving Edges
+    let start_p2 = std::time::Instant::now();
     step = 1;
     let mut global_visited_edges = HashSet::new();
     global_visited_edges.insert(cube.clone());
@@ -2413,6 +2421,7 @@ pub fn solve_cube_macro_hybrid(
             break;
         }
 
+        let start_beam = std::time::Instant::now();
         let mut best_macros = solve_phase_beam_search(
             cube,
             SolverPhase::Phase2Edges,
@@ -2421,6 +2430,7 @@ pub fn solve_cube_macro_hybrid(
             5,
             &global_visited_edges,
         );
+        println!("    🔍 [Beam Search] Step {} (Edges) took {:?}", step, start_beam.elapsed());
 
         if let Some(ref bm) = best_macros {
             if bm.is_empty() {
@@ -2456,7 +2466,10 @@ pub fn solve_cube_macro_hybrid(
         }
     }
 
+    println!("  ✅ Phase 2 (Edges) solved in {:?}", start_p2.elapsed());
+
     // Phase 3: Solving Corners, Edges and Parities
+    let start_p3 = std::time::Instant::now();
     step = 1;
     let mut global_visited_stage3 = HashSet::new();
     global_visited_stage3.insert(cube.clone());
@@ -2467,6 +2480,7 @@ pub fn solve_cube_macro_hybrid(
             break;
         }
 
+        let start_beam = std::time::Instant::now();
         let mut best_macros = solve_phase_beam_search(
             cube,
             SolverPhase::Phase3CornersAndParity,
@@ -2475,6 +2489,7 @@ pub fn solve_cube_macro_hybrid(
             6,
             &global_visited_stage3,
         );
+        println!("    🔍 [Beam Search] Step {} (3x3rd Stage) took {:?}", step, start_beam.elapsed());
 
         if let Some(ref bm) = best_macros {
             if bm.is_empty() {
@@ -2509,6 +2524,8 @@ pub fn solve_cube_macro_hybrid(
             break;
         }
     }
+
+    println!("  ✅ Phase 3 solved in {:?}", start_p3.elapsed());
 
     if cube.count_misplaced_stickers() == 0 {
         Some(solved_solution)
