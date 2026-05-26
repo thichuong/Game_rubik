@@ -1,9 +1,9 @@
 // Dynamic generator and searcher for 3-cycle commutators using exact index tracking and color-based preservation.
 // All comments in source files must be in English.
 
+use crate::center_solver::orbit::{CenterPiece, Orbit, decompose_orbits};
 use crate::cube::moves::{Axis, from_3d_to_rc, to_3d};
 use crate::cube::{Cube, CubeError, Face};
-use crate::center_solver::orbit::{CenterPiece, Orbit, decompose_orbits};
 
 /// Generates the inverse of a move string.
 pub fn get_inverse_move(m: &str) -> String {

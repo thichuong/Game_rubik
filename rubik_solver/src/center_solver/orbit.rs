@@ -178,11 +178,11 @@ pub fn decompose_orbits(size: usize) -> Vec<Orbit> {
         let is_diagonal = o.d_min == o.d_max;
         let is_axis = size % 2 == 1 && o.d_max == size / 2;
         let priority = if is_diagonal {
-            2 // Diagonal last
+            0 // Diagonal first (solved by isolated slice-slice commutators)
         } else if is_axis {
             1 // Axis second
         } else {
-            0 // Oblique first (solved first with maximum freedom)
+            2 // Oblique last (solved with maximum commutator freedom)
         };
         (priority, o.d_min, o.d_max)
     });

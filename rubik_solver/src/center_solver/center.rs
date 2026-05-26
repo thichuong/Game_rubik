@@ -1,9 +1,9 @@
 // Main center solver implementation for nxn Rubik's cubes using orbit commutators.
 // All comments in source files must be in English.
 
-use crate::cube::{Cube, CubeError, Face};
 use crate::center_solver::commutator::find_any_solving_commutator;
 use crate::center_solver::orbit::{Orbit, decompose_orbits};
+use crate::cube::{Cube, CubeError, Face};
 
 /// Solves all the mobile center pieces of the cube.
 /// Returns the list of moves required to solve the centers.
@@ -14,82 +14,36 @@ pub fn solve_centers(cube: &mut Cube) -> Result<Vec<String>, CubeError> {
     }
 
     let mut final_moves = Vec::new();
+
+    // --- PHASE 1: GLOBAL PARITY RESOLUTION (DRY RUN SCAN) ---
+    // Mathematically analyze and resolve all odd parity states in the centers
+    // before executing any actual solving moves.
     let mut scan_iterations = 0;
     let max_scan_iterations = 12;
 
     while scan_iterations < max_scan_iterations {
         scan_iterations += 1;
 
-        let mut virtual_cube = cube.clone();
         let orbits = decompose_orbits(size);
-        let mut virtual_moves = Vec::new();
-        let mut success = true;
+        let mut odd_orbits = Vec::new();
 
-        for orbit in &orbits {
-            match solve_single_orbit(&mut virtual_cube, orbit) {
-                Ok(mut orbit_moves) => {
-                    virtual_moves.append(&mut orbit_moves);
-                }
-                Err(_) => {
-                    success = false;
-                    break; // Deadlock or odd parity detected in this orbit!
-                }
+        for i in 0..orbits.len() {
+            let orbit = &orbits[i];
+            let mut virtual_cube = cube.clone();
+            if dry_run_solve_orbit(&mut virtual_cube, orbit).is_err() {
+                odd_orbits.push(i);
             }
         }
 
-        if success {
-            // Verify that all mobile centers are indeed solved on the virtual cube
-            let mut all_solved = true;
-            for face_idx in 0..6 {
-                let face = match face_idx {
-                    0 => Face::U,
-                    1 => Face::D,
-                    2 => Face::F,
-                    3 => Face::B,
-                    4 => Face::L,
-                    _ => Face::R,
-                };
-                for r in 1..(size - 1) {
-                    for c in 1..(size - 1) {
-                        if size % 2 == 1 && r == size / 2 && c == size / 2 {
-                            continue;
-                        }
-                        if virtual_cube.get(face, r, c)? != face {
-                            all_solved = false;
-                            break;
-                        }
-                    }
-                    if !all_solved {
-                        break;
-                    }
-                }
-                if !all_solved {
-                    break;
-                }
-            }
-
-            if all_solved {
-                // Apply the successful virtual moves to the real cube
-                for m in &virtual_moves {
-                    cube.apply_move(m)?;
-                }
-                final_moves.extend(virtual_moves);
-                return Ok(final_moves);
-            }
+        if odd_orbits.is_empty() {
+            break; // All orbits are mathematically guaranteed to have EVEN parity!
         }
 
-        // If virtual solve failed, apply a 90-degree slice turn on the real cube to flip parity
-        let temp_orbits = decompose_orbits(size);
-        // Find a non-diagonal orbit to generate breaker move, or fallback to the first one
-        let mut target_orbit = &temp_orbits[0];
-        for o in &temp_orbits {
-            if o.d_min != o.d_max {
-                target_orbit = o;
-                break;
-            }
-        }
-
+        // Fix parity of the first odd orbit by applying a 90-degree slice turn
+        let target_orbit_idx = odd_orbits[0];
+        let target_orbit = &orbits[target_orbit_idx];
         let parity_breaker = get_parity_breaker_move(size, target_orbit, scan_iterations - 1);
+
         let clean_breaker = if parity_breaker.ends_with('2')
             && parity_breaker.len() >= 3
             && parity_breaker
@@ -104,16 +58,92 @@ pub fn solve_centers(cube: &mut Cube) -> Result<Vec<String>, CubeError> {
         };
 
         println!(
-            "[PARITY RESOLUTION] Odd parity/deadlock detected. Flipping parity with: {}",
-            clean_breaker
+            "[PARITY RESOLUTION] Orbit ({},{}) detected as ODD. Flipping parity with: {}",
+            target_orbit.d_min, target_orbit.d_max, clean_breaker
         );
         cube.apply_move(&clean_breaker)?;
         final_moves.push(clean_breaker);
     }
 
-    Err(CubeError::InvalidMove(
-        "Could not resolve center parities within max iterations".to_string(),
-    ))
+    // --- PHASE 2: ACTUAL SOLVING ---
+    // Now that all orbits are mathematically guaranteed to have EVEN parity,
+    // solve them sequentially in absolute priority order without deadlock risks.
+    let orbits = decompose_orbits(size);
+    for orbit in &orbits {
+        let mut orbit_moves = solve_single_orbit(cube, orbit)?;
+        final_moves.append(&mut orbit_moves);
+    }
+
+    // Double check that all mobile centers are indeed solved
+    for face_idx in 0..6 {
+        let face = match face_idx {
+            0 => Face::U,
+            1 => Face::D,
+            2 => Face::F,
+            3 => Face::B,
+            4 => Face::L,
+            _ => Face::R,
+        };
+        for r in 1..(size - 1) {
+            for c in 1..(size - 1) {
+                if size % 2 == 1 && r == size / 2 && c == size / 2 {
+                    continue; // Skip central fixed center
+                }
+                let val = cube.get(face, r, c)?;
+                if val != face {
+                    return Err(CubeError::InvalidMove(format!(
+                        "Solver finished but center at {:?}({},{}) is unsolved: expected {:?}, got {:?}",
+                        face, r, c, face, val
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(final_moves)
+}
+
+/// Helper to check if an orbit has even or odd parity by running a virtual solve.
+fn dry_run_solve_orbit(cube: &mut Cube, orbit: &Orbit) -> Result<(), CubeError> {
+    let size = cube.size();
+    let mut iterations = 0;
+    let max_iterations = 40;
+
+    while iterations < max_iterations {
+        iterations += 1;
+
+        let mut unsolved_count = 0;
+        for &p in &orbit.pieces {
+            if cube.get(p.face, p.row, p.col)? != p.face {
+                unsolved_count += 1;
+            }
+        }
+
+        if unsolved_count == 0 {
+            return Ok(()); // Solved! Even parity confirmed.
+        }
+
+        let len = orbit.pieces.len();
+        let mut solved_mask = vec![false; len];
+        for i in 0..len {
+            let p = &orbit.pieces[i];
+            solved_mask[i] = cube.get(p.face, p.row, p.col)? == p.face;
+        }
+
+        // Dry run is allowed to solve without global preservation to purely verify the orbit's internal parity
+        match find_any_solving_commutator(size, cube, orbit, &solved_mask, true) {
+            Ok(comm_moves) => {
+                for m in &comm_moves {
+                    cube.apply_move(m)?;
+                }
+            }
+            Err(_) => {
+                return Err(CubeError::InvalidMove("Odd parity detected".to_string()));
+            }
+        }
+    }
+
+    Err(CubeError::InvalidMove("Max iterations reached".to_string()))
 }
 
 /// Solves a single center orbit using 3-cycle commutators.

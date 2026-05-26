@@ -3,10 +3,10 @@
 // Integration and unit tests for the nxn Rubik's cube center solver.
 // All comments in source files must be in English.
 
+use rubik_solver::Cube;
 use rubik_solver::center_solver::center::solve_centers;
 use rubik_solver::center_solver::orbit::decompose_orbits;
 use rubik_solver::cube::Face;
-use rubik_solver::Cube;
 
 /// Utility to generate a random scramble path for an nxn cube.
 fn scramble_cube(cube: &mut Cube, depth: usize) -> Vec<String> {
@@ -171,7 +171,7 @@ fn test_oblique_commutator_solve() {
 
 #[test]
 fn test_commutator_3_cycle_movement() {
-    use rubik_solver::solver::commutator::find_3cycle_commutator;
+    use rubik_solver::center_solver::commutator::find_3cycle_commutator;
 
     let mut cube = Cube::new(6).unwrap();
     let initial_state = cube.to_string_state();
