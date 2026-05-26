@@ -1,14 +1,23 @@
-pub mod core;
-pub mod helpers;
-pub mod plugin;
-pub mod resources;
+<<<<<<< HEAD
+#![allow(clippy::manual_strip)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_if)]
+
+// Declares modules and sets up the public APIs.
+// All comments in source files must be in English.
+
+pub mod cube;
 pub mod solver;
 
-pub use core::{CubieFace, Direction, Face, FaceMapping, RotationAxis, RotationMove};
-pub use helpers::{
-    get_cube_state, get_cube_state_for_size, logical_string_to_physical_moves_any, move_to_string,
-    optimize_moves, physical_move_to_logical_string_any, solution_to_moves,
-};
-pub use plugin::SolverPlugin;
-pub use resources::{SolverResource, StepByStepSolution};
-pub use solver::{solve_cube, solve_cube_for_size};
+pub use cube::{Cube, CubeError, Face};
+=======
+#![allow(clippy::must_use_candidate)]
+
+pub mod camera;
+pub mod environment;
+pub mod events;
+pub mod input;
+pub mod rubik;
+pub mod ui;
+>>>>>>> 14bedf2fde708ad88f3e393c99ad64f65d77917e
