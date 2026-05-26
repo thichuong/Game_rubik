@@ -3,7 +3,7 @@
 
 use crate::cube::moves::{Axis, from_3d_to_rc, to_3d};
 use crate::cube::{Cube, CubeError, Face};
-use crate::solver::orbit::{CenterPiece, Orbit, decompose_orbits};
+use crate::center_solver::orbit::{CenterPiece, Orbit, decompose_orbits};
 
 /// Generates the inverse of a move string.
 pub fn get_inverse_move(m: &str) -> String {
@@ -529,7 +529,12 @@ pub fn find_any_solving_commutator(
             3 // Perfect solving step (highest priority)
         } else if became_solved > became_unsolved {
             2 // Net positive progress step (allow temporary swaps)
-        } else if became_solved == 0 && became_unsolved == 0 && color_unchanged && is_odd {
+        } else if became_solved == 0
+            && became_unsolved == 0
+            && color_unchanged
+            && is_odd
+            && !dry_run
+        {
             1 // Parity flip step (color-preserving odd permutation to break parity without scrambling anything!)
         } else {
             0
