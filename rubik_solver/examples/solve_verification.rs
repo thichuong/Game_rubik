@@ -20,8 +20,35 @@
 )]
 
 use bevy::prelude::*;
-use game_rubik::rubik::components::{Cubie, CubieFace, GridCoord, RubikCube};
 use rubik_solver::core::{Direction, Face, FaceMapping, RotationAxis, RotationMove};
+use rubik_solver::CubieFace;
+
+// Define local components to avoid circular dependency on game_rubik in examples
+
+/// Marker for the entire Rubik's cube root entity
+#[derive(Component)]
+struct RubikCube;
+
+/// Marker for a cubie entity
+#[derive(Component)]
+struct Cubie;
+
+/// Logical coordinates of a cubie in the NxNxN grid (0 to size - 1)
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct GridCoord(pub IVec3);
+
+impl GridCoord {
+    /// Update the logical coordinate based on a 90-degree rotation
+    #[allow(clippy::cast_precision_loss)]
+    fn rotate(&mut self, axis: Vec3, angle: f32, size: i32) {
+        let offset = (size as f32 - 1.0) / 2.0;
+        let rotation = Quat::from_axis_angle(axis, angle);
+        let centered = self.0.as_vec3() - Vec3::splat(offset);
+        let rotated = rotation * centered;
+        let restored = rotated + Vec3::splat(offset);
+        self.0 = restored.round().as_ivec3();
+    }
+}
 
 // Simple LCG PRNG for deterministic scrambles without external dependencies
 struct SimpleRng {
@@ -240,7 +267,7 @@ fn run_verification_test(size: i32, seed: u64, table: &kewb::DataTable) {
         eprintln!("Failed to get scrambled cube state!");
         return;
     };
-    let Some(solution_moves_strings) = rubik_solver::solve_cube_for_size(size, &state_str, table)
+    let Some(solution_moves_strings) = rubik_solver::solver::solve_cube_for_size(size, &state_str, table)
     else {
         eprintln!("Unified Bevy solver failed to find a solution!");
         return;
