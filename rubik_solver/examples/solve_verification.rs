@@ -20,8 +20,8 @@
 )]
 
 use bevy::prelude::*;
-use rubik_solver::core::{Direction, Face, FaceMapping, RotationAxis, RotationMove};
 use rubik_solver::CubieFace;
+use rubik_solver::core::{Direction, Face, FaceMapping, RotationAxis, RotationMove};
 
 // Define local components to avoid circular dependency on game_rubik in examples
 
@@ -267,7 +267,8 @@ fn run_verification_test(size: i32, seed: u64, table: &kewb::DataTable) {
         eprintln!("Failed to get scrambled cube state!");
         return;
     };
-    let Some(solution_moves_strings) = rubik_solver::solver::solve_cube_for_size(size, &state_str, table)
+    let Some(solution_moves_strings) =
+        rubik_solver::solver::solve_cube_for_size(size, &state_str, table)
     else {
         eprintln!("Unified Bevy solver failed to find a solution!");
         return;

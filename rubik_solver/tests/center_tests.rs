@@ -273,13 +273,14 @@ fn test_orbit_decomposition() {
     // Since n=6 is even:
     // Orbit 1: Diagonal outer (d_min: 1, d_max: 1) -> 24 pieces
     // Orbit 2: Diagonal inner (d_min: 2, d_max: 2) -> 24 pieces
-    // Orbit 3: Oblique (d_min: 1, d_max: 2, sub_orbit 0) -> 48 pieces (Group A & B merged)
-    // Total: 3 orbits = 96 pieces.
+    // Orbit 3: Oblique A (d_min: 1, d_max: 2, sub_orbit 0) -> 24 pieces
+    // Orbit 4: Oblique B (d_min: 1, d_max: 2, sub_orbit 1) -> 24 pieces
+    // Total: 4 orbits = 96 pieces.
     let orbits_6x6 = decompose_orbits(6);
-    assert_eq!(orbits_6x6.len(), 3);
+    assert_eq!(orbits_6x6.len(), 4);
     let mut total_pieces = 0;
     for o in &orbits_6x6 {
-        assert!(o.pieces.len() == 24 || o.pieces.len() == 48);
+        assert_eq!(o.pieces.len(), 24);
         total_pieces += o.pieces.len();
     }
     assert_eq!(total_pieces, 96);
@@ -290,15 +291,16 @@ fn test_orbit_decomposition() {
     // Orbits:
     // 1. Diagonal outer (1, 1) -> 24
     // 2. Diagonal inner (2, 2) -> 24
-    // 3. Oblique (1, 2) -> 48 (merged)
-    // 4. Cross outer (1, 3) -> 24
-    // 5. Cross inner (2, 3) -> 24
-    // Total: 5 orbits = 144 pieces.
+    // 3. Oblique A (1, 2) -> 24
+    // 4. Oblique B (1, 2) -> 24
+    // 5. Cross outer (1, 3) -> 24
+    // 6. Cross inner (2, 3) -> 24
+    // Total: 6 orbits = 144 pieces.
     let orbits_7x7 = decompose_orbits(7);
-    assert_eq!(orbits_7x7.len(), 5);
+    assert_eq!(orbits_7x7.len(), 6);
     let mut total_pieces = 0;
     for o in &orbits_7x7 {
-        assert!(o.pieces.len() == 24 || o.pieces.len() == 48);
+        assert_eq!(o.pieces.len(), 24);
         total_pieces += o.pieces.len();
     }
     assert_eq!(total_pieces, 144);
@@ -422,4 +424,187 @@ fn test_integration_solve_centers_7x7_depth_100() {
     println!("Solve moves: {:?}", solve_moves);
 
     assert_centers_solved(&cube);
+}
+
+#[test]
+fn test_deadlock_axis_scramble_7x7_depth_5() {
+    let mut cube = Cube::new(7).unwrap();
+    // This specific scramble sequence was identified to cause a deadlock in orbit (1,3,0) before optimizations
+    let scramble = vec![
+        "b52".to_string(),
+        "b3".to_string(),
+        "b5'".to_string(),
+        "d42".to_string(),
+        "b12".to_string(),
+    ];
+    println!("Applying specific deadlock scramble: {:?}", scramble);
+    for m in &scramble {
+        cube.apply_move(m).unwrap();
+    }
+
+    let solve_moves = solve_centers(&mut cube).unwrap();
+    println!("Solved specific deadlock with moves: {:?}", solve_moves);
+    assert_centers_solved(&cube);
+}
+
+#[test]
+fn test_deadlock_axis_scramble_7x7_depth_50() {
+    let mut cube = Cube::new(7).unwrap();
+    // This long scramble sequence caused a deadlock in orbit (1,3,0) at iteration 38 before optimizations
+    let scramble = vec![
+        "b52".to_string(),
+        "b3".to_string(),
+        "b5'".to_string(),
+        "d42".to_string(),
+        "b12".to_string(),
+        "b5'".to_string(),
+        "b2".to_string(),
+        "d1'".to_string(),
+        "b2".to_string(),
+        "b22".to_string(),
+        "l2".to_string(),
+        "d32".to_string(),
+        "l4".to_string(),
+        "b3".to_string(),
+        "d42".to_string(),
+        "d32".to_string(),
+        "l22".to_string(),
+        "d12".to_string(),
+        "d1".to_string(),
+        "d2'".to_string(),
+        "d5'".to_string(),
+        "b32".to_string(),
+        "b52".to_string(),
+        "b12".to_string(),
+        "b3'".to_string(),
+        "b2'".to_string(),
+        "d4".to_string(),
+        "d22".to_string(),
+        "d2'".to_string(),
+        "b22".to_string(),
+        "b5'".to_string(),
+        "b3".to_string(),
+        "b4'".to_string(),
+        "d1'".to_string(),
+        "d1'".to_string(),
+        "b1".to_string(),
+        "b5'".to_string(),
+        "d3".to_string(),
+        "b22".to_string(),
+        "d22".to_string(),
+        "b3'".to_string(),
+        "d5'".to_string(),
+        "d2".to_string(),
+        "l2'".to_string(),
+        "d5'".to_string(),
+        "d42".to_string(),
+        "l22".to_string(),
+        "d1".to_string(),
+        "d42".to_string(),
+        "b32".to_string(),
+    ];
+    println!("Applying long specific deadlock scramble: {:?}", scramble);
+    for m in &scramble {
+        cube.apply_move(m).unwrap();
+    }
+
+    let solve_moves = solve_centers(&mut cube).unwrap();
+    println!(
+        "Solved long specific deadlock with moves: {:?}",
+        solve_moves
+    );
+    assert_centers_solved(&cube);
+}
+
+#[test]
+fn test_parity_detection_accuracy() {
+    use rubik_solver::center_solver::center::compute_orbit_parity;
+
+    // Test on a 6x6 cube
+    let mut cube = Cube::new(6).unwrap();
+    let orbits = decompose_orbits(6);
+
+    // Solved cube has EVEN parity for all orbits
+    for orbit in &orbits {
+        let is_odd = compute_orbit_parity(&cube, orbit).unwrap();
+        assert!(
+            !is_odd,
+            "Solved cube orbit ({},{}) should have EVEN parity",
+            orbit.d_min, orbit.d_max
+        );
+    }
+
+    // Apply a single slice move "r1" (which is an odd permutation on orbits it intersects)
+    cube.apply_move("r1").unwrap();
+
+    // Let's check which orbits are flipped to ODD.
+    for orbit in &orbits {
+        let is_odd = compute_orbit_parity(&cube, orbit).unwrap();
+        println!(
+            "After r1, Orbit ({},{},{}) has odd parity: {}",
+            orbit.d_min, orbit.d_max, orbit.sub_orbit, is_odd
+        );
+    }
+}
+
+#[test]
+fn test_dump_stuck_state_7x7() {
+    // This is the diagnostic test requested to visualize stuck states
+    let mut cube = Cube::new(7).unwrap();
+
+    // Apply a complex center scramble that would trigger deadlocks in naive parity breaker
+    let scramble = vec![
+        "b12", "b1", "b1'", "d12", "b12", "b1'", "b1", "d1'", "b1", "b12", "l1", "d12", "l1", "b1",
+        "d12", "d12", "l12", "d12", "d1", "d1'", "d1'", "b12", "b12", "b12", "b1'", "b1'", "d1",
+        "d12", "d1'", "b12",
+    ];
+
+    for m in &scramble {
+        let _ = cube.apply_move(m);
+    }
+
+    println!("\n--- DIAGNOSTIC STUCK STATE CUBE NET ---");
+    cube.print_net();
+    println!("--------------------------------------\n");
+
+    // Confirm we can solve it completely using the new GF(2) solver
+    let solve_moves = solve_centers(&mut cube).unwrap();
+    println!("GF(2) parity solver resolved with moves: {:?}", solve_moves);
+    assert_centers_solved(&cube);
+}
+
+#[test]
+fn test_color_preservation_after_moves() {
+    let mut cube = Cube::new(7).unwrap();
+
+    let count_colors = |c: &Cube| {
+        let mut counts = std::collections::HashMap::new();
+        let faces = [Face::U, Face::D, Face::F, Face::B, Face::L, Face::R];
+        for &face in &faces {
+            for r in 0..7 {
+                for col in 0..7 {
+                    let val = c.get(face, r, col).unwrap();
+                    *counts.entry(val).or_insert(0) += 1;
+                }
+            }
+        }
+        counts
+    };
+
+    let initial_counts = count_colors(&cube);
+    for (&color, &count) in &initial_counts {
+        assert_eq!(count, 49, "Initial color {:?} count should be 49", color);
+    }
+
+    // Apply a single slice move r1
+    cube.apply_move("r1").unwrap();
+
+    let post_counts = count_colors(&cube);
+    for (&color, &count) in &post_counts {
+        assert_eq!(
+            count, 49,
+            "Color {:?} count after r1 should be 49, got {}",
+            color, count
+        );
+    }
 }

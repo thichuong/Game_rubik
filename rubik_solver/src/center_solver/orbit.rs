@@ -119,8 +119,10 @@ pub fn decompose_orbits(size: usize) -> Vec<Orbit> {
                     pieces,
                 });
             } else {
-                // General oblique orbit (chiral): 48 pieces (Group A & B merged to preserve physical isolation)
-                let mut pieces = Vec::with_capacity(48);
+                // General oblique orbit (chiral): split into 2 independent sub-orbits of 24 pieces each (Group A and Group B).
+                // They are physically and mathematically isolated orbits, having independent parity states.
+                let mut pieces_a = Vec::with_capacity(24);
+                let mut pieces_b = Vec::with_capacity(24);
 
                 let faces = [Face::U, Face::D, Face::F, Face::B, Face::L, Face::R];
                 for &face in &faces {
@@ -145,14 +147,14 @@ pub fn decompose_orbits(size: usize) -> Vec<Orbit> {
                     ];
 
                     for &(r, c) in &group_a_pos {
-                        pieces.push(CenterPiece {
+                        pieces_a.push(CenterPiece {
                             face,
                             row: r,
                             col: c,
                         });
                     }
                     for &(r, c) in &group_b_pos {
-                        pieces.push(CenterPiece {
+                        pieces_b.push(CenterPiece {
                             face,
                             row: r,
                             col: c,
@@ -164,7 +166,13 @@ pub fn decompose_orbits(size: usize) -> Vec<Orbit> {
                     d_min,
                     d_max,
                     sub_orbit: 0,
-                    pieces,
+                    pieces: pieces_a,
+                });
+                orbits.push(Orbit {
+                    d_min,
+                    d_max,
+                    sub_orbit: 1,
+                    pieces: pieces_b,
                 });
             }
         }

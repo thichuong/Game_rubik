@@ -405,7 +405,7 @@ pub fn find_3cycle_commutator(
 /// without corrupting already solved pieces.
 /// Returns the sequence of moves.
 /// Helper to calculate if a permutation is odd.
-fn is_odd_permutation(perm: &[usize]) -> bool {
+pub fn is_odd_permutation(perm: &[usize]) -> bool {
     let n = perm.len();
     let mut visited = vec![false; n];
     let mut transpositions = 0;
@@ -588,38 +588,49 @@ pub fn find_any_solving_commutator(
     let mut best_seq = Vec::new();
     let mut best_score = 0;
 
-    // 1. Try zero setup (pure 4-move commutator [X, Y])
+    // 1. Try zero setup (pure 4-move commutator)
+    // 1a. Highly optimized: [Slice, Face] and [Face, Slice] commutator (super clean, super fast, mathematically preferred)
     for x in &slice_moves {
-        for y in &y_candidates {
+        for y in &face_moves {
             if x == y || x == &get_inverse_move(y) {
                 continue;
             }
             let x_inv = get_inverse_move(x);
             let y_inv = get_inverse_move(y);
 
-            let seq = vec![x.clone(), y.clone(), x_inv, y_inv];
-            let score = evaluate_seq(&seq)?;
-            if score == 3 {
-                return Ok(seq); // Immediate return for perfect move
-            } else if score > best_score {
-                best_score = score;
-                best_seq = seq;
+            // Form 1: [Slice, Face] = X Y X' Y'
+            let seq1 = vec![x.clone(), y.clone(), x_inv.clone(), y_inv.clone()];
+            let score1 = evaluate_seq(&seq1)?;
+            if score1 == 3 {
+                return Ok(seq1); // Immediate return for perfect move
+            } else if score1 > best_score {
+                best_score = score1;
+                best_seq = seq1;
+            }
+
+            // Form 2: [Face, Slice] = Y X Y' X'
+            let seq2 = vec![y.clone(), x.clone(), y_inv.clone(), x_inv.clone()];
+            let score2 = evaluate_seq(&seq2)?;
+            if score2 == 3 {
+                return Ok(seq2); // Immediate return for perfect move
+            } else if score2 > best_score {
+                best_score = score2;
+                best_seq = seq2;
             }
         }
     }
 
-    // 2. Try 1-move setup (6-move sequence: S + [X, Y] + S')
-    for s in &all_setup_candidates {
-        let s_inv = get_inverse_move(s);
+    // 1b. Fallback: [Slice, Slice] commutator
+    if best_score < 3 {
         for x in &slice_moves {
-            for y in &y_candidates {
+            for y in &slice_moves {
                 if x == y || x == &get_inverse_move(y) {
                     continue;
                 }
                 let x_inv = get_inverse_move(x);
                 let y_inv = get_inverse_move(y);
 
-                let seq = vec![s.clone(), x.clone(), y.clone(), x_inv, y_inv, s_inv.clone()];
+                let seq = vec![x.clone(), y.clone(), x_inv, y_inv];
                 let score = evaluate_seq(&seq)?;
                 if score == 3 {
                     return Ok(seq); // Immediate return for perfect move
@@ -631,53 +642,209 @@ pub fn find_any_solving_commutator(
         }
     }
 
-    // 3. Try 2-face-move setup (8-move: S1 + S2 + [X, Y] + S2' + S1')
-    // Uses CW/CCW-only candidates (no double turns) to keep search tractable.
-    let mut simple_x = Vec::new();
-    for m in &slice_moves {
-        if !m.ends_with('2') {
-            simple_x.push(m.clone());
-        }
-    }
-    let mut simple_y = Vec::new();
-    for m in &y_candidates {
-        if !m.ends_with('2') {
-            simple_y.push(m.clone());
-        }
-    }
-
-    for s1 in &face_setup_candidates {
-        let s1_inv = get_inverse_move(s1);
-        for s2 in &face_setup_candidates {
-            if s1 == s2 || s1 == &get_inverse_move(s2) {
-                continue;
-            }
-            let s2_inv = get_inverse_move(s2);
-
-            for x in &simple_x {
-                for y in &simple_y {
+    // 2. Try 1-move setup (6-move sequence: S + [X, Y] + S')
+    // 2a. Highly optimized: Face Setup + [Slice, Face] / [Face, Slice] commutator
+    if best_score < 3 {
+        for s in &face_moves {
+            let s_inv = get_inverse_move(s);
+            for x in &slice_moves {
+                for y in &face_moves {
                     if x == y || x == &get_inverse_move(y) {
                         continue;
                     }
                     let x_inv = get_inverse_move(x);
                     let y_inv = get_inverse_move(y);
 
-                    let seq = vec![
-                        s1.clone(),
-                        s2.clone(),
+                    // Form 1: S + [Slice, Face] + S'
+                    let seq1 = vec![
+                        s.clone(),
                         x.clone(),
                         y.clone(),
-                        x_inv,
-                        y_inv,
-                        s2_inv.clone(),
-                        s1_inv.clone(),
+                        x_inv.clone(),
+                        y_inv.clone(),
+                        s_inv.clone(),
                     ];
+                    let score1 = evaluate_seq(&seq1)?;
+                    if score1 == 3 {
+                        return Ok(seq1); // Immediate return for perfect move
+                    } else if score1 > best_score {
+                        best_score = score1;
+                        best_seq = seq1;
+                    }
+
+                    // Form 2: S + [Face, Slice] + S'
+                    let seq2 = vec![
+                        s.clone(),
+                        y.clone(),
+                        x.clone(),
+                        y_inv.clone(),
+                        x_inv.clone(),
+                        s_inv.clone(),
+                    ];
+                    let score2 = evaluate_seq(&seq2)?;
+                    if score2 == 3 {
+                        return Ok(seq2); // Immediate return for perfect move
+                    } else if score2 > best_score {
+                        best_score = score2;
+                        best_seq = seq2;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2b. Fallback: Any Setup + Any Commutator
+    if best_score < 3 {
+        // Optimize search space: in dry run, restrict Y to face moves to run 5x faster,
+        // while keeping full setup candidate flexibility to solve oblique orbits.
+        let simple_y_candidates = if dry_run { &face_moves } else { &y_candidates };
+
+        for s in &all_setup_candidates {
+            let s_inv = get_inverse_move(s);
+            for x in &slice_moves {
+                for y in simple_y_candidates {
+                    // Skip if already evaluated in 2a
+                    let s_is_face = face_moves.contains(s);
+                    let y_is_face = face_moves.contains(y);
+                    if s_is_face && y_is_face {
+                        continue; // Already checked in 2a
+                    }
+
+                    if x == y || x == &get_inverse_move(y) {
+                        continue;
+                    }
+                    let x_inv = get_inverse_move(x);
+                    let y_inv = get_inverse_move(y);
+
+                    let seq = vec![s.clone(), x.clone(), y.clone(), x_inv, y_inv, s_inv.clone()];
                     let score = evaluate_seq(&seq)?;
                     if score == 3 {
                         return Ok(seq); // Immediate return for perfect move
                     } else if score > best_score {
                         best_score = score;
                         best_seq = seq;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Try 2-face-move setup (8-move: S1 + S2 + [X, Y] + S2' + S1')
+    // Only run this expensive search if we haven't found any perfect solving step (score = 3)
+    // and we are NOT in a dry run. Dry runs do not need 8-move commutators as 4-move and 6-move
+    // commutators are mathematically sufficient under unconstrained (no global preservation) dry run conditions.
+    if best_score < 3 && !dry_run {
+        let mut simple_x = Vec::new();
+        for m in &slice_moves {
+            if !m.ends_with('2') {
+                simple_x.push(m.clone());
+            }
+        }
+        let mut simple_y = Vec::new();
+        let y_source = &face_moves;
+        for m in y_source {
+            if !m.ends_with('2') {
+                simple_y.push(m.clone());
+            }
+        }
+
+        for s1 in &face_setup_candidates {
+            let s1_inv = get_inverse_move(s1);
+            for s2 in &face_setup_candidates {
+                if s1 == s2 || s1 == &get_inverse_move(s2) {
+                    continue;
+                }
+                let s2_inv = get_inverse_move(s2);
+
+                for x in &simple_x {
+                    for y in &simple_y {
+                        if x == y || x == &get_inverse_move(y) {
+                            continue;
+                        }
+                        let x_inv = get_inverse_move(x);
+                        let y_inv = get_inverse_move(y);
+
+                        let seq = vec![
+                            s1.clone(),
+                            s2.clone(),
+                            x.clone(),
+                            y.clone(),
+                            x_inv,
+                            y_inv,
+                            s2_inv.clone(),
+                            s1_inv.clone(),
+                        ];
+                        let score = evaluate_seq(&seq)?;
+                        if score == 3 {
+                            return Ok(seq); // Immediate return for perfect move
+                        } else if score > best_score {
+                            best_score = score;
+                            best_seq = seq;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if best_score >= 2 {
+        return Ok(best_seq);
+    }
+
+    // 4. Strategic Fallback: If no solving commutator was found and we are not in dry_run,
+    // perform an expensive rescue scan with y_source = &y_candidates (allowing slice moves as Y)
+    // to find a complex commutator that still satisfies the global preservation filter.
+    if !dry_run {
+        let mut simple_x = Vec::new();
+        for m in &slice_moves {
+            if !m.ends_with('2') {
+                simple_x.push(m.clone());
+            }
+        }
+        let mut simple_y = Vec::new();
+        for m in &y_candidates {
+            if !m.ends_with('2') {
+                simple_y.push(m.clone());
+            }
+        }
+
+        for s1 in &face_setup_candidates {
+            let s1_inv = get_inverse_move(s1);
+            for s2 in &face_setup_candidates {
+                if s1 == s2 || s1 == &get_inverse_move(s2) {
+                    continue;
+                }
+                let s2_inv = get_inverse_move(s2);
+
+                for x in &simple_x {
+                    for y in &simple_y {
+                        // Skip if already evaluated (where y is a face move)
+                        if face_moves.contains(y) {
+                            continue;
+                        }
+                        if x == y || x == &get_inverse_move(y) {
+                            continue;
+                        }
+                        let x_inv = get_inverse_move(x);
+                        let y_inv = get_inverse_move(y);
+
+                        let seq = vec![
+                            s1.clone(),
+                            s2.clone(),
+                            x.clone(),
+                            y.clone(),
+                            x_inv,
+                            y_inv,
+                            s2_inv.clone(),
+                            s1_inv.clone(),
+                        ];
+                        let score = evaluate_seq(&seq)?;
+                        if score == 3 {
+                            return Ok(seq); // Immediate return for perfect move
+                        } else if score > best_score {
+                            best_score = score;
+                            best_seq = seq;
+                        }
                     }
                 }
             }
