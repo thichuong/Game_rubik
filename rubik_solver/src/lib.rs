@@ -2,6 +2,7 @@ pub mod core;
 pub mod helpers;
 pub mod plugin;
 pub mod resources;
+pub mod commutator_solver;
 pub mod solver;
 
 pub use core::{CubieFace, Direction, Face, FaceMapping, RotationAxis, RotationMove};

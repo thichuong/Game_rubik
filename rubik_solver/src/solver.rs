@@ -162,7 +162,9 @@ pub fn solve_nxn_state_only(state_str: &str) -> Option<Vec<String>> {
 /// It solves the cube state using the Kociemba table or Python solver.
 #[allow(clippy::cast_sign_loss)]
 pub fn solve_cube_for_size(size: i32, state_str: &str, table: &DataTable) -> Option<Vec<String>> {
-    if size >= 4 {
+    if size >= 6 {
+        crate::commutator_solver::solve(size as usize, state_str)
+    } else if size >= 4 {
         solve_nxn_state_only(state_str)
     } else {
         solve_cube(state_str, table)
