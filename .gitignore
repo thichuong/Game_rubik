@@ -28,4 +28,4 @@ Thumbs.db
 *~
 
 # --- Python Solvers and Big-Cube Libraries ---
-python_solver/
+python_solver/rubiks-cube-NxNxN-solver

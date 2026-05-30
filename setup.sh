@@ -97,6 +97,22 @@ else
 fi
 echo ""
 
+# -----------------------------------------------------------------------------
+# 3. PRE-DOWNLOAD SOLVER LOOKUP TABLES
+# -----------------------------------------------------------------------------
+echo "3. Pre-downloading Big Cube Solver Lookup Tables from S3..."
+echo "   This ensures the Bevy game can solve 4x4 and 5x5 cubes instantly without timeout errors."
+echo "   Downloading ~350MB of data, this may take a few minutes depending on your internet connection..."
+
+# Run the python pre-download script inside virtual environment
+if .venv/bin/python python_solver/download_tables.py; then
+    echo "   [SUCCESS] Lookup tables successfully downloaded and cached."
+else
+    echo "   [WARNING] Failed to pre-download some lookup tables."
+    echo "             The game will still attempt to download them lazily on first solve."
+fi
+echo ""
+
 echo "=================================================="
 echo "   🎉 ALL SYSTEMS CONFIGURED SUCCESSFULLY!"
 echo "=================================================="

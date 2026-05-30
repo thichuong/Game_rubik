@@ -118,8 +118,8 @@ pub fn solve_nxn_state_only(state_str: &str) -> Option<Vec<String>> {
     };
 
     // Set robust timeouts to prevent freezing in case of processing anomalies.
-    // Use 300s (5 minutes) read timeout to accommodate S3 lookup table download on first run.
-    let _ = stream.set_read_timeout(Some(Duration::from_mins(5)));
+    // Use 1200s (20 minutes) read timeout to accommodate S3 lookup table download on first run.
+    let _ = stream.set_read_timeout(Some(Duration::from_mins(20)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
 
     let request = format!("{state_str}\n");
