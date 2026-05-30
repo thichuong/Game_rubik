@@ -62,8 +62,9 @@ def solve_cube(state: str, order: str = "URFDLB") -> str:
     if not cube.solved():
         raise SolveError("Cube should be solved but is not.")
 
-    # Return space-separated moves
-    return " ".join(cube.solution)
+    # Return space-separated moves, filtering out comments
+    solution_minus_comments = [step for step in cube.solution if not step.startswith("COMMENT")]
+    return " ".join(solution_minus_comments)
 
 def main():
     # Record parent PID to detect if Rust parent exits

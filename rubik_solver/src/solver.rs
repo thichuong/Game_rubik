@@ -139,6 +139,7 @@ pub fn solve_nxn_state_only(state_str: &str) -> Option<Vec<String>> {
                     }
                     let moves = sol_part
                         .split_whitespace()
+                        .filter(|m| !m.starts_with("COMMENT"))
                         .map(String::from)
                         .collect::<Vec<String>>();
                     return Some(moves);
