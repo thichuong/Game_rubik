@@ -18,6 +18,8 @@ logger.setLevel(logging.INFO)
 # Import solver classes upfront to warm up Python interpreter
 logger.info("Warming up NxN solver classes...")
 try:
+    from rubikscubennnsolver.RubiksCube222 import RubiksCube222
+    from rubikscubennnsolver.RubiksCube333 import RubiksCube333
     from rubikscubennnsolver.RubiksCube444 import RubiksCube444
     from rubikscubennnsolver.RubiksCube555 import RubiksCube555
     from rubikscubennnsolver.RubiksCube666 import RubiksCube666
