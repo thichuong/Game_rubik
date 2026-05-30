@@ -13,24 +13,62 @@ echo ""
 # Get the absolute path to the project root directory
 PROJECT_ROOT="$(pwd)"
 
-# -----------------------------------------------------------------------------
-# 1. SETUP ROOT PYTHON VIRTUAL ENVIRONMENT (For Rubik Solver Crate)
-# -----------------------------------------------------------------------------
-echo "1. Creating root virtual environment (.venv)..."
-if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
-    echo "   [SUCCESS] Root virtual environment created."
+# Find a compatible Python version (MediaPipe solutions work best on 3.9 - 3.12)
+COMPATIBLE_PYTHON=""
+for py_bin in python3.12 python3.11 python3.10 python3.9 python3; do
+    if command -v "$py_bin" &> /dev/null; then
+        # Check if the version is not 3.13 or 3.14 (where MediaPipe solutions is broken)
+        py_ver=$("$py_bin" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
+        if [ "$py_ver" != "3.13" ] && [ "$py_ver" != "3.14" ] && [ "$py_ver" != "3.15" ] && [ ! -z "$py_ver" ]; then
+            COMPATIBLE_PYTHON="$py_bin"
+            break
+        fi
+    fi
+done
+
+if [ -z "$COMPATIBLE_PYTHON" ]; then
+    echo "⚠️  WARNING: No highly compatible Python version (3.9 - 3.12) found in your PATH!"
+    echo "   MediaPipe Hands legacy solutions are known to be broken on Python 3.13+ (detected: $(python3 --version))."
+    echo "   We will fallback to '$(command -v python3)' but hand tracking may fail to import."
+    echo "   👉 TO FIX THIS: Please install Python 3.12 by running:"
+    echo "      Fedora:  sudo dnf install python3.12"
+    echo "      Ubuntu:  sudo apt install python3.12"
+    echo "   Then delete the existing .venv folders and re-run this setup script."
+    echo ""
+    COMPATIBLE_PYTHON="python3"
 else
-    echo "   [INFO] Root virtual environment already exists."
+    echo "   [INFO] Found compatible Python interpreter: $(command -v $COMPATIBLE_PYTHON) (version $($COMPATIBLE_PYTHON --version))"
+    echo ""
 fi
 
-echo "   Upgrading pip and installing required root dependencies..."
+# -----------------------------------------------------------------------------
+# 1. SETUP UNIFIED PYTHON VIRTUAL ENVIRONMENT (For Solver & Hand Tracker)
+# -----------------------------------------------------------------------------
+echo "1. Creating unified virtual environment (.venv)..."
+if [ ! -d ".venv" ]; then
+    $COMPATIBLE_PYTHON -m venv .venv
+    echo "   [SUCCESS] Unified virtual environment created."
+else
+    echo "   [INFO] Unified virtual environment already exists."
+fi
+
+echo "   Upgrading pip and installing required Python dependencies..."
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install opencv-python mediapipe protobuf
+.venv/bin/pip install opencv-python "mediapipe==0.10.14" protobuf
 
 echo "   Compiling and installing dwalton76's Kociemba solver library..."
-.venv/bin/pip install git+https://github.com/dwalton76/kociemba.git
-echo "   [SUCCESS] Root Python environment configured successfully."
+if ! .venv/bin/pip install git+https://github.com/dwalton76/kociemba.git; then
+    echo ""
+    echo "❌ ERROR: Failed to compile and install Kociemba solver library!"
+    echo "   This usually happens because Python development headers (pyconfig.h) are missing."
+    echo "   👉 TO FIX THIS, please run the following command to install headers:"
+    echo "      Fedora:  sudo dnf install python3.12-devel"
+    echo "      Ubuntu:  sudo apt install python3.12-dev"
+    echo "   Then re-run this setup script: ./setup.sh"
+    echo ""
+    exit 1
+fi
+echo "   [SUCCESS] Unified Python environment configured successfully."
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -57,23 +95,6 @@ else
     echo "   [ERROR] C-based solver source files not found!"
     exit 1
 fi
-echo ""
-
-# -----------------------------------------------------------------------------
-# 3. SETUP HAND TRACKER VIRTUAL ENVIRONMENT (For Bevy Webcam Integration)
-# -----------------------------------------------------------------------------
-echo "3. Setting up Hand Tracking Environment (hand_tracker/.venv)..."
-if [ ! -d "hand_tracker/.venv" ]; then
-    python3 -m venv hand_tracker/.venv
-    echo "   [SUCCESS] Hand tracker virtual environment created."
-else
-    echo "   [INFO] Hand tracker virtual environment already exists."
-fi
-
-echo "   Upgrading pip and installing dependencies for MediaPipe tracker..."
-hand_tracker/.venv/bin/pip install --upgrade pip
-hand_tracker/.venv/bin/pip install opencv-python mediapipe protobuf
-echo "   [SUCCESS] Hand Tracking Python environment configured successfully."
 echo ""
 
 echo "=================================================="

@@ -91,17 +91,21 @@ pub struct HandTracker {
 impl HandTracker {
     /// Create a new hand tracker, spawning the Python MediaPipe worker
     pub fn new() -> std::io::Result<(Self, Arc<Mutex<Option<Child>>>)> {
-        let python_path = "hand_tracker/.venv/bin/python";
+        let python_path = ".venv/bin/python";
         let script_path = "hand_tracker/hand_tracker.py";
 
-        let mut child = Command::new(python_path)
-            .arg(script_path)
+        let mut cmd = Command::new(python_path);
+        cmd.arg(script_path)
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|e| {
-                std::io::Error::other(format!("Failed to spawn Python MediaPipe process: {e}"))
-            })?;
+            .stderr(Stdio::inherit());
+
+        // Clear virtualenv environment variables to prevent inheriting a different active virtualenv
+        cmd.env_remove("VIRTUAL_ENV");
+        cmd.env_remove("PYTHONHOME");
+
+        let mut child = cmd.spawn().map_err(|e| {
+            std::io::Error::other(format!("Failed to spawn Python MediaPipe process: {e}"))
+        })?;
 
         let stdout = child
             .stdout
