@@ -60,45 +60,71 @@ impl Plugin for HandTrackingPlugin {
             .insert_resource(HandDragState::default())
             .add_message::<HandRotationEvent>()
             .add_message::<CameraFrameEvent>()
-            .add_systems(Startup, (setup_camera_listener, setup_hand_hover_materials))
-            .add_systems(Update, (receive_hand_tracking, update_hand_hover));
+            .add_systems(Startup, setup_hand_hover_materials)
+            .add_systems(
+                Update,
+                (
+                    manage_hand_tracking_service,
+                    receive_hand_tracking,
+                    update_hand_hover,
+                ),
+            );
     }
 }
 
 #[derive(Resource)]
 struct HandTrackingReceiver(Mutex<Receiver<hand_tracker::TrackerData>>);
 
-fn setup_camera_listener(mut commands: Commands) {
-    let (tx, rx) = mpsc::channel();
+/// Dynamically manages the hand tracking Python subprocess and camera connection.
+/// When hand tracking is enabled, it spawns the subprocess and starts reading packets.
+/// When hand tracking is disabled, it drops the process resource (terminating it) and frees the camera.
+fn manage_hand_tracking_service(
+    enabled: Res<HandTrackingEnabled>,
+    tracker_process: Option<Res<HandTrackerProcess>>,
+    mut drag_state: ResMut<HandDragState>,
+    mut commands: Commands,
+) {
+    if enabled.0 {
+        if tracker_process.is_none() {
+            match hand_tracker::HandTracker::new() {
+                Ok((mut tracker, shared_child)) => {
+                    let (tx, rx) = mpsc::channel();
+                    commands.insert_resource(HandTrackerProcess(shared_child));
 
-    let (mut tracker, shared_child) = match hand_tracker::HandTracker::new() {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Failed to initialize camera tracker: {e}");
-            return;
-        }
-    };
+                    thread::spawn(move || {
+                        loop {
+                            match tracker.get_delta() {
+                                Ok(Some(data)) => {
+                                    if tx.send(data).is_err() {
+                                        // The receiver was dropped, break the loop
+                                        break;
+                                    }
+                                }
+                                Ok(None) => {}
+                                Err(e) => {
+                                    eprintln!("Hand tracker error: {e}");
+                                    // Break the loop if the pipe is broken (process killed or exited)
+                                    break;
+                                }
+                            }
+                        }
+                    });
 
-    commands.insert_resource(HandTrackerProcess(shared_child));
-
-    thread::spawn(move || {
-        loop {
-            match tracker.get_delta() {
-                Ok(Some(data)) => {
-                    let _ = tx.send(data);
+                    commands.insert_resource(HandTrackingReceiver(Mutex::new(rx)));
                 }
-                Ok(None) => {}
                 Err(e) => {
-                    eprintln!("Hand tracker error: {e}");
-                    // Break the loop if the pipe is broken (process killed or exited)
-                    break;
+                    eprintln!("Failed to initialize camera tracker: {e}");
                 }
             }
-            // No sleep here: block naturally on pipe read_exact to ensure absolute real-time synchronization
         }
-    });
+    } else if tracker_process.is_some() {
+        // Dropping the resource automatically kills the Python child process
+        commands.remove_resource::<HandTrackerProcess>();
+        commands.remove_resource::<HandTrackingReceiver>();
 
-    commands.insert_resource(HandTrackingReceiver(Mutex::new(rx)));
+        // Reset the drag states to clean up active hover highlights
+        *drag_state = HandDragState::default();
+    }
 }
 
 #[allow(
